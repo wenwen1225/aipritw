@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#7c5cff" />
+  <title>掉卡順序紀錄器</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <style>
+    :root{
+      --bg:#f6f4ff;
+      --card:#ffffff;
+      --text:#2f2a3b;
+      --muted:#7d748d;
+      --line:#e8e2f4;
+      --purple:#7c5cff;
+      --purple-2:#9c84ff;
+      --pink:#ff7eb6;
+      --gold:#e5a500;
+      --blue:#4b86d9;
+      --danger:#dc4860;
+      --shadow:0 10px 30px rgba(72,49,118,.10);
+      --radius:20px;
+    }
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    html,body{margin:0;background:var(--bg);color:var(--text);font-family:ui-rounded,"PingFang TC","Noto Sans TC",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    button,input{font:inherit}
+    button{cursor:pointer}
+    .app{max-width:720px;margin:0 auto;min-height:100dvh;padding:env(safe-area-inset-top) 14px calc(96px + env(safe-area-inset-bottom))}
+    header{padding:18px 6px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+    h1{font-size:24px;margin:0;letter-spacing:.02em}
+    .subtitle{font-size:13px;color:var(--muted);margin-top:4px}
+    .icon-btn{border:0;background:#fff;border-radius:14px;padding:10px 12px;box-shadow:var(--shadow);color:var(--text)}
+    .panel{background:var(--card);border:1px solid rgba(130,101,187,.09);box-shadow:var(--shadow);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+    .panel-title{font-size:13px;color:var(--muted);font-weight:700;margin-bottom:10px}
+    .lane-switch{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .lane-btn{border:2px solid var(--line);background:#fff;border-radius:18px;padding:15px 10px;font-size:17px;font-weight:900;color:var(--muted)}
+    .lane-btn.active{border-color:var(--purple);background:linear-gradient(135deg,#eee8ff,#f9f6ff);color:var(--purple);box-shadow:inset 0 0 0 1px rgba(124,92,255,.05)}
+    .lane-btn.right.active{border-color:var(--pink);background:linear-gradient(135deg,#fff0f7,#fff9fc);color:#e75b98}
+    .sign-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .sign-btn{border:1.5px solid var(--line);background:#fff;border-radius:14px;padding:12px 8px;font-weight:900;color:var(--muted)}
+    .sign-btn.active{border-color:var(--purple);background:#f1edff;color:var(--purple)}
+    .sign-btn.sign.active{border-color:#ff9dc9;background:#fff1f8;color:#cf4f88}
+    .tip{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5}
+    .cards-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+    .card-btn{position:relative;min-height:48px;border:1.5px solid var(--line);background:#fff;border-radius:13px;font-weight:900;color:var(--text);box-shadow:0 4px 10px rgba(72,49,118,.04)}
+    .card-btn:active{transform:scale(.97)}
+    .card-btn .badge{position:absolute;right:4px;top:3px;font-size:10px;line-height:1}
+    .card-btn.four-star{border-color:#f1c95d;background:#fffaf0}
+    .card-btn.three-star{border-color:#b9a7ff;background:#faf8ff}
+    .card-btn.two-star{border-color:#9fc5ef;background:#f7fbff}
+    .recent{display:flex;flex-wrap:wrap;gap:7px;min-height:34px}
+    .chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:7px 9px;background:#f6f3fb;font-size:12px;font-weight:800;border:1px solid var(--line)}
+    .chip.left{color:var(--purple)} .chip.right{color:#df5a95}
+    .chip.four-hit{background:#fff5cf;border-color:#efc34d;color:#9b6a00;box-shadow:0 0 0 2px rgba(239,195,77,.12) inset}
+    .empty{color:var(--muted);font-size:13px}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+    .four-track-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .four-track-card{border:1.5px solid var(--line);border-radius:16px;padding:12px;background:#fff}
+    .four-track-card.left{border-color:#cfc1ff;background:#fbf9ff}.four-track-card.right{border-color:#ffc5df;background:#fff9fc}
+    .four-track-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:7px;font-size:14px;font-weight:900}
+    .four-track-now{font-size:22px;font-weight:950;line-height:1.15}
+    .four-track-now span{font-size:12px;color:var(--muted);font-weight:700}
+    .four-track-last{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.5}
+    .four-track-last strong{color:#9b6a00}
+    .four-event-list{display:grid;gap:7px;margin-top:10px}
+    .four-event{border:1px solid #f1d27a;background:#fffaf0;border-radius:13px;padding:9px 10px;font-size:12px;line-height:1.45}
+    .stat{background:#faf9ff;border:1px solid var(--line);border-radius:14px;padding:10px;text-align:center}
+    .stat b{display:block;font-size:20px}.stat span{font-size:11px;color:var(--muted)}
+    .history-list{display:grid;gap:8px}
+    .history-item{border:1px solid var(--line);border-radius:14px;padding:10px;background:#fff}
+    .history-head{display:flex;justify-content:space-between;gap:8px;align-items:center}
+    .history-head b{font-size:14px}.history-head span{font-size:11px;color:var(--muted)}
+    .history-summary{margin-top:6px;font-size:12px;color:var(--muted);line-height:1.5}
+    .text-btn{border:0;background:transparent;color:var(--purple);font-weight:800;padding:5px}
+    .footer-bar{position:fixed;left:0;right:0;bottom:0;background:rgba(246,244,255,.93);backdrop-filter:blur(12px);border-top:1px solid var(--line);padding:10px 14px calc(10px + env(safe-area-inset-bottom));z-index:20}
+    .footer-inner{max-width:720px;margin:0 auto;display:grid;grid-template-columns:1fr 1.4fr;gap:10px}
+    .undo,.finish{border:0;border-radius:16px;padding:14px;font-weight:900}
+    .undo{background:#fff;color:var(--text);border:1px solid var(--line)}
+    .finish{background:linear-gradient(135deg,var(--purple),var(--purple-2));color:#fff;box-shadow:0 8px 20px rgba(124,92,255,.25)}
+    .undo:disabled{opacity:.45}
+    .overlay{position:fixed;inset:0;background:rgba(30,20,45,.38);display:none;align-items:flex-end;justify-content:center;z-index:50}
+    .overlay.show{display:flex}
+    .sheet{width:min(720px,100%);max-height:88dvh;overflow:auto;background:#fff;border-radius:26px 26px 0 0;padding:18px 16px calc(24px + env(safe-area-inset-bottom));box-shadow:0 -18px 60px rgba(25,15,40,.18)}
+    .sheet h2{margin:0 0 4px;font-size:21px}.sheet p{margin:0 0 14px;color:var(--muted);font-size:13px}
+    .sheet-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+    .sheet-actions button{flex:1;min-width:120px;border:0;border-radius:14px;padding:12px;font-weight:900}
+    .primary{background:var(--purple);color:#fff}.secondary{background:#f4f1f8;color:var(--text)}.danger{background:#fff0f2;color:var(--danger)}
+    .log{display:grid;gap:7px;margin-top:10px}
+    .log-row{display:grid;grid-template-columns:42px 46px 1fr 52px;align-items:center;gap:6px;border-bottom:1px dashed var(--line);padding:7px 2px;font-size:12px}
+    .log-row:last-child{border-bottom:0}
+    .log-row.four-hit{background:#fffaf0;border:1px solid #f2d477;border-radius:12px;padding:9px 8px;margin:2px 0}
+    .four-note{grid-column:1/-1;background:#fff0b8;color:#8a5b00;border-radius:9px;padding:6px 8px;font-size:11px;font-weight:900;margin-top:2px}
+    .pill{border-radius:999px;padding:4px 7px;text-align:center;font-weight:800;background:#f5f2fa}.pill.l{color:var(--purple)}.pill.r{color:#df5a95}
+    .mini-note{font-size:11px;color:var(--muted);margin-top:8px}
+    .toast{position:fixed;left:50%;bottom:105px;transform:translateX(-50%) translateY(12px);background:#2f2a3b;color:#fff;border-radius:999px;padding:10px 14px;font-size:12px;font-weight:800;opacity:0;pointer-events:none;transition:.18s;z-index:80;white-space:nowrap}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    @media (min-width:560px){.cards-grid{grid-template-columns:repeat(10,1fr)}.card-btn{min-height:50px}.app{padding-left:20px;padding-right:20px}}
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div>
+        <h1>掉卡順序紀錄器</h1>
+        <div class="subtitle" id="sessionLabel">新的一局・尚未掉卡</div>
+      </div>
+    </header>
+
+    <section class="panel">
+      <div class="panel-title">1｜目前調整哪一道？</div>
+      <div class="lane-switch">
+        <button class="lane-btn active" id="leftLane" data-lane="left">⬅️ 左道</button>
+        <button class="lane-btn right" id="rightLane" data-lane="right">右道 ➡️</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">2｜這張是不是簽卡？</div>
+      <div class="sign-row">
+        <button class="sign-btn active" data-sign="false">一般版本</button>
+        <button class="sign-btn sign" data-sign="true">✍️ 簽卡</button>
+      </div>
+      <div class="tip">星等會依卡號自動判定：001–019 四星、020–040 三星、041–056 二星。簽卡不綁定編號，需要時先點「✍️ 簽卡」再點卡號；記錄後會自動切回一般版本。</div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">3｜點擊掉下來的卡號（001–056）</div>
+      <div class="cards-grid" id="cardsGrid"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">最近掉卡</div>
+      <div class="recent" id="recentList"><span class="empty">還沒有紀錄</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">本局統計</div>
+      <div class="stats">
+        <div class="stat"><b id="countAll">0</b><span>總張數</span></div>
+        <div class="stat"><b id="countLeft">0</b><span>左道</span></div>
+        <div class="stat"><b id="countRight">0</b><span>右道</span></div>
+        <div class="stat"><b id="countRare">0</b><span>簽卡</span></div>
+      </div>
+    </section>
+
+
+    <section class="panel">
+      <div class="panel-title">四星追蹤｜各道掉幾張普卡後出四星</div>
+      <div class="four-track-grid">
+        <div class="four-track-card left">
+          <div class="four-track-head"><span>⬅️ 左道</span><span id="leftFourCount">0 次四星</span></div>
+          <div class="four-track-now"><b id="leftNormalCount">0</b> <span>張普卡累積中</span></div>
+          <div class="four-track-last" id="leftLastFour">尚未掉四星</div>
+        </div>
+        <div class="four-track-card right">
+          <div class="four-track-head"><span>右道 ➡️</span><span id="rightFourCount">0 次四星</span></div>
+          <div class="four-track-now"><b id="rightNormalCount">0</b> <span>張普卡累積中</span></div>
+          <div class="four-track-last" id="rightLastFour">尚未掉四星</div>
+        </div>
+      </div>
+      <div class="tip">普卡目前以 2★、3★ 的一般版本計算；簽卡不算入普卡。每一道遇到 4★ 後，該道的普卡累積會重新從 0 開始。</div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">歷史紀錄</div>
+      <div class="history-list" id="historyList"></div>
+    </section>
+  </main>
+
+  <div class="footer-bar">
+    <div class="footer-inner">
+      <button class="undo" id="undoBtn" disabled>↩ 撤銷上一張</button>
+      <button class="finish" id="finishBtn">完成本局</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="resultOverlay">
+    <div class="sheet">
+      <h2>本局完整掉卡紀錄</h2>
+      <p id="resultMeta"></p>
+      <div class="stats">
+        <div class="stat"><b id="rAll">0</b><span>總張數</span></div>
+        <div class="stat"><b id="rLeft">0</b><span>左道</span></div>
+        <div class="stat"><b id="rRight">0</b><span>右道</span></div>
+        <div class="stat"><b id="rRare">0</b><span>簽卡</span></div>
+      </div>
+      <div class="panel-title" style="margin-top:16px">四星出卡紀錄</div>
+      <div class="four-event-list" id="resultFourEvents"></div>
+      <div class="panel-title" style="margin-top:16px">實際掉卡順序</div>
+      <div class="log" id="resultLog"></div>
+      <div class="panel-title" style="margin-top:16px">左右道各自順序</div>
+      <div id="laneSummary" class="history-summary"></div>
+      <div class="sheet-actions">
+        <button class="secondary" id="copyBtn">複製文字</button>
+        <button class="secondary" id="csvBtn">匯出 CSV</button>
+        <button class="primary" id="saveNextBtn">儲存並開新局</button>
+      </div>
+      <div class="sheet-actions"><button class="danger" id="closeResultBtn">先回去繼續記</button></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="historyOverlay">
+    <div class="sheet">
+      <h2>歷史紀錄</h2>
+      <p id="historyMeta"></p>
+      <div class="panel-title" style="margin-top:12px">四星出卡紀錄</div>
+      <div class="four-event-list" id="historyFourEvents"></div>
+      <div class="panel-title" style="margin-top:16px">實際掉卡順序</div>
+      <div class="log" id="historyLog"></div>
+      <div class="panel-title" style="margin-top:16px">左右道各自順序</div>
+      <div id="historyLaneSummary" class="history-summary"></div>
+      <div class="sheet-actions">
+        <button class="danger" id="deleteHistoryBtn">刪除此紀錄</button>
+        <button class="primary" id="closeHistoryBtn">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const $$ = s => [...document.querySelectorAll(s)];
+  const pad = n => String(n).padStart(3,'0');
+  const rarityForCard = card => { const n=Number(card); return n<=19 ? 'four' : n<=40 ? 'three' : 'two'; };
+  const rarityLabel = r => r === 'four' ? '★★★★ 四星' : r === 'three' ? '★★★ 三星' : '★★ 二星';
+  const rarityBadge = r => r === 'four' ? '4★' : r === 'three' ? '3★' : '2★';
+  const rarityEmoji = r => r === 'four' ? '⭐' : '';
+  const laneLabel = l => l === 'left' ? '左' : '右';
+  const STORE_HISTORY = 'cardDropTracker.history.v1';
+
+  let lane = 'left';
+  let signed = false;
+  let records = [];
+  let sessionStartedAt = new Date();
+  let history = load(STORE_HISTORY, []);
+  let selectedHistoryId = null;
+
+  function load(key, fallback){ try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
+  function save(key, value){ localStorage.setItem(key, JSON.stringify(value)); }
+  function nowText(date = new Date()){
+    return new Intl.DateTimeFormat('zh-TW',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(date);
+  }
+  function fullText(date){
+    return new Intl.DateTimeFormat('zh-TW',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(date);
+  }
+  function toast(msg){
+    const el=$('#toast'); el.textContent=msg; el.classList.add('show');
+    clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),1300);
+  }
+
+  function renderCards(){
+    const grid=$('#cardsGrid'); grid.innerHTML='';
+    for(let i=1;i<=56;i++){
+      const id=pad(i); const r=rarityForCard(id);
+      const b=document.createElement('button');
+      b.className=`card-btn ${r}-star`;
+      b.innerHTML=`<span>${id}</span><span class="badge">${rarityBadge(r)}</span>`;
+      b.addEventListener('click',()=>addRecord(id));
+      grid.appendChild(b);
+    }
+  }
+
+  function addRecord(card){
+    const rarity = rarityForCard(card);
+    const laneAtDrop=lane;
+    const before=fourStarTracking(records).state[laneAtDrop].normal;
+    records.push({card,lane:laneAtDrop,rarity,signed,time:new Date().toISOString()});
+    const wasSigned=signed;
+    setSigned(false);
+    renderCurrent();
+    if(rarity==='four'){
+      if(navigator.vibrate) navigator.vibrate([80,45,80]);
+      toast(`✨ ${laneLabel(laneAtDrop)}道 ${card} 四星！前面 ${before} 張普卡`);
+    }else{
+      if(navigator.vibrate) navigator.vibrate(18);
+      toast(`${laneLabel(laneAtDrop)}道 ${card} ${rarityLabel(rarity)}${wasSigned ? ' ✍️簽卡' : ''} 已記錄`);
+    }
+  }
+
+  function renderCurrent(){
+    $('#undoBtn').disabled=records.length===0;
+    $('#countAll').textContent=records.length;
+    $('#countLeft').textContent=records.filter(x=>x.lane==='left').length;
+    $('#countRight').textContent=records.filter(x=>x.lane==='right').length;
+    $('#countRare').textContent=records.filter(isSignedRecord).length;
+    $('#sessionLabel').textContent=records.length ? `本局 ${records.length} 張・開始於 ${nowText(sessionStartedAt)}` : '新的一局・尚未掉卡';
+    renderFourTracking(records);
+    const recent=$('#recentList'); recent.innerHTML='';
+    if(!records.length){ recent.innerHTML='<span class="empty">還沒有紀錄</span>'; return; }
+    records.slice(-8).reverse().forEach((x,idx)=>{
+      const c=document.createElement('span'); const r=normalizeRarity(x); c.className=`chip ${x.lane}${r==='four'?' four-hit':''}`;
+      c.textContent=`${records.length-idx}. ${r==='four'?'✨ ':''}${laneLabel(x.lane)}${x.card} ${rarityBadge(r)}${isSignedRecord(x)?'✍️':''}`;
+      recent.appendChild(c);
+    });
+  }
+
+  function setLane(next){
+    lane=next; $('#leftLane').classList.toggle('active',lane==='left'); $('#rightLane').classList.toggle('active',lane==='right');
+  }
+  function setSigned(next){ signed=next; $$('.sign-btn').forEach(b=>b.classList.toggle('active',String(next)===b.dataset.sign)); }
+  function normalizeRarity(x){ return ['four','three','two'].includes(x.rarity) ? x.rarity : rarityForCard(x.card); }
+  function isSignedRecord(x){ return x.signed === true || x.rarity === 'sign'; }
+  function isNormalRecord(x){ return normalizeRarity(x) !== 'four' && !isSignedRecord(x); }
+
+  function fourStarTracking(list){
+    const state={
+      left:{normal:0,events:[]},
+      right:{normal:0,events:[]}
+    };
+    const byIndex=new Map();
+    list.forEach((x,i)=>{
+      const laneState=state[x.lane];
+      if(normalizeRarity(x)==='four'){
+        const event={index:i,card:x.card,lane:x.lane,normalBefore:laneState.normal,signed:isSignedRecord(x),time:x.time};
+        laneState.events.push(event);
+        byIndex.set(i,event);
+        laneState.normal=0;
+      }else if(isNormalRecord(x)){
+        laneState.normal+=1;
+      }
+    });
+    return {state,byIndex};
+  }
+
+  function renderFourTracking(list=records){
+    const {state}=fourStarTracking(list);
+    const left=state.left,right=state.right;
+    $('#leftNormalCount').textContent=left.normal;
+    $('#rightNormalCount').textContent=right.normal;
+    $('#leftFourCount').textContent=`${left.events.length} 次四星`;
+    $('#rightFourCount').textContent=`${right.events.length} 次四星`;
+    $('#leftLastFour').innerHTML=left.events.length ? lastFourText(left.events.at(-1)) : '尚未掉四星';
+    $('#rightLastFour').innerHTML=right.events.length ? lastFourText(right.events.at(-1)) : '尚未掉四星';
+  }
+
+  function lastFourText(event){
+    return `最近四星：<strong>${event.card}${event.signed?' ✍️':''}</strong>｜前面 ${event.normalBefore} 張普卡`;
+  }
+
+  function fillFourEvents(container,list){
+    const {state}=fourStarTracking(list);
+    const events=[...state.left.events,...state.right.events].sort((a,b)=>a.index-b.index);
+    container.innerHTML='';
+    if(!events.length){ container.innerHTML='<span class="empty">這一局還沒有掉四星。</span>'; return; }
+    events.forEach((e,n)=>{
+      const div=document.createElement('div'); div.className='four-event';
+      div.innerHTML=`✨ <b>${laneLabel(e.lane)}道 ${e.card} 4★${e.signed?' ✍️':''}</b>｜前面 <b>${e.normalBefore}</b> 張普卡`;
+      container.appendChild(div);
+    });
+  }
+
+  function openResult(){
+    if(!records.length){ toast('這一局還沒有掉卡紀錄'); return; }
+    const end=new Date();
+    $('#resultMeta').textContent=`${fullText(sessionStartedAt)} ～ ${fullText(end)}`;
+    $('#rAll').textContent=records.length;
+    $('#rLeft').textContent=records.filter(x=>x.lane==='left').length;
+    $('#rRight').textContent=records.filter(x=>x.lane==='right').length;
+    $('#rRare').textContent=records.filter(isSignedRecord).length;
+    fillFourEvents($('#resultFourEvents'),records);
+    fillLog($('#resultLog'), records);
+    $('#laneSummary').innerHTML=laneSummaryHtml(records);
+    $('#resultOverlay').classList.add('show');
+  }
+
+  function fillLog(container, list){
+    container.innerHTML='';
+    const {byIndex}=fourStarTracking(list);
+    list.forEach((x,i)=>{
+      const r=normalizeRarity(x);
+      const row=document.createElement('div'); row.className=`log-row${r==='four'?' four-hit':''}`;
+      const t=new Date(x.time);
+      row.innerHTML=`<b>#${i+1}</b><span class="pill ${x.lane==='left'?'l':'r'}">${laneLabel(x.lane)}道</span><b>${r==='four'?'✨ ':''}${x.card} ${rarityBadge(r)}${isSignedRecord(x)?' ✍️':''}</b><span>${t.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}</span>`;
+      if(r==='four'){
+        const event=byIndex.get(i);
+        const note=document.createElement('div'); note.className='four-note';
+        note.textContent=`四星掉卡｜${laneLabel(x.lane)}道前面掉了 ${event.normalBefore} 張普卡`;
+        row.appendChild(note);
+      }
+      container.appendChild(row);
+    });
+  }
+
+  function laneSummaryHtml(list){
+    const left=list.filter(x=>x.lane==='left').map(x=>`${x.card} ${rarityBadge(normalizeRarity(x))}${isSignedRecord(x)?'✍️':''}`).join(' → ') || '—';
+    const right=list.filter(x=>x.lane==='right').map(x=>`${x.card} ${rarityBadge(normalizeRarity(x))}${isSignedRecord(x)?'✍️':''}`).join(' → ') || '—';
+    return `<b style="color:var(--purple)">左道：</b>${left}<br><b style="color:#df5a95">右道：</b>${right}`;
+  }
+
+  function makeSession(){
+    return {id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), startedAt:sessionStartedAt.toISOString(), endedAt:new Date().toISOString(), records:(typeof structuredClone === 'function') ? structuredClone(records) : JSON.parse(JSON.stringify(records))};
+  }
+
+  function saveAndNew(){
+    const session=makeSession(); history.unshift(session); history=history.slice(0,100); save(STORE_HISTORY,history);
+    records=[]; sessionStartedAt=new Date(); setLane('left'); setSigned(false);
+    $('#resultOverlay').classList.remove('show'); renderCurrent(); renderHistory(); toast('本局已儲存');
+  }
+
+  function renderHistory(){
+    const box=$('#historyList'); box.innerHTML='';
+    if(!history.length){ box.innerHTML='<span class="empty">完成一局後，紀錄會保存在這裡。</span>'; return; }
+    history.slice(0,8).forEach(s=>{
+      const rare=s.records.filter(isSignedRecord).length;
+      const item=document.createElement('div'); item.className='history-item';
+      item.innerHTML=`<div class="history-head"><b>${nowText(new Date(s.startedAt))}・${s.records.length} 張</b><button class="text-btn">查看</button></div><div class="history-summary">左 ${s.records.filter(x=>x.lane==='left').length}｜右 ${s.records.filter(x=>x.lane==='right').length}｜簽卡 ${rare}</div>`;
+      item.querySelector('button').addEventListener('click',()=>openHistory(s.id)); box.appendChild(item);
+    });
+  }
+
+  function openHistory(id){
+    const s=history.find(x=>x.id===id); if(!s) return; selectedHistoryId=id;
+    $('#historyMeta').textContent=`${fullText(new Date(s.startedAt))} ～ ${fullText(new Date(s.endedAt))}・共 ${s.records.length} 張`;
+    fillFourEvents($('#historyFourEvents'),s.records); fillLog($('#historyLog'),s.records); $('#historyLaneSummary').innerHTML=laneSummaryHtml(s.records); $('#historyOverlay').classList.add('show');
+  }
+
+  function exportText(list=records){
+    const tracking=fourStarTracking(list);
+    const lines=list.map((x,i)=>{ const r=normalizeRarity(x); const fourNote=r==='four' ? `・前 ${tracking.byIndex.get(i).normalBefore} 張普卡` : ''; return `${i+1}. ${laneLabel(x.lane)}道 ${x.card} ${rarityLabel(r)}${isSignedRecord(x)?'・✍️ 簽卡':''}${fourNote}`; });
+    const left=list.filter(x=>x.lane==='left').map(x=>`${x.card} ${rarityBadge(normalizeRarity(x))}${isSignedRecord(x)?'✍️':''}`).join(' → ');
+    const right=list.filter(x=>x.lane==='right').map(x=>`${x.card} ${rarityBadge(normalizeRarity(x))}${isSignedRecord(x)?'✍️':''}`).join(' → ');
+    return `掉卡順序紀錄\n${lines.join('\n')}\n\n左道：${left||'—'}\n右道：${right||'—'}`;
+  }
+
+  function csvEscape(v){const s=String(v); return /[",\n]/.test(s)?`"${s.replaceAll('"','""')}"`:s;}
+  function exportCSV(){
+    const tracking=fourStarTracking(records);
+    const rows=[['順序','道','卡號','星等','簽卡','四星前普卡數','時間'],...records.map((x,i)=>{ const r=normalizeRarity(x); return [i+1,laneLabel(x.lane),x.card,rarityLabel(r),isSignedRecord(x)?'是':'否',r==='four'?tracking.byIndex.get(i).normalBefore:'',fullText(new Date(x.time))]; })];
+    const csv='\uFEFF'+rows.map(r=>r.map(csvEscape).join(',')).join('\n');
+    const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`掉卡紀錄_${Date.now()}.csv`; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+
+  $('#leftLane').addEventListener('click',()=>setLane('left'));
+  $('#rightLane').addEventListener('click',()=>setLane('right'));
+  $$('.sign-btn').forEach(b=>b.addEventListener('click',()=>setSigned(b.dataset.sign==='true')));
+  $('#undoBtn').addEventListener('click',()=>{ if(records.length){ const x=records.pop(); renderCurrent(); toast(`已撤銷 ${laneLabel(x.lane)}道 ${x.card}`); } });
+  $('#finishBtn').addEventListener('click',openResult);
+  $('#closeResultBtn').addEventListener('click',()=>$('#resultOverlay').classList.remove('show'));
+  $('#saveNextBtn').addEventListener('click',saveAndNew);
+  $('#copyBtn').addEventListener('click',async()=>{ try{ await navigator.clipboard.writeText(exportText()); toast('已複製'); }catch{ toast('瀏覽器不允許自動複製'); } });
+  $('#csvBtn').addEventListener('click',exportCSV);
+  $('#closeHistoryBtn').addEventListener('click',()=>$('#historyOverlay').classList.remove('show'));
+  $('#deleteHistoryBtn').addEventListener('click',()=>{ if(!selectedHistoryId)return; history=history.filter(x=>x.id!==selectedHistoryId);save(STORE_HISTORY,history);$('#historyOverlay').classList.remove('show');renderHistory();toast('已刪除歷史紀錄'); });
+  [$('#resultOverlay'),$('#historyOverlay')].forEach(ov=>ov.addEventListener('click',e=>{if(e.target===ov)ov.classList.remove('show')}));
+
+  renderCards(); renderCurrent(); renderHistory();
+  if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+})();
+</script>
+</body>
+</html>

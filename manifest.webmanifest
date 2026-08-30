@@ -1,0 +1,9 @@
+{
+  "name": "掉卡順序紀錄器",
+  "short_name": "掉卡紀錄",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f6f4ff",
+  "theme_color": "#7c5cff",
+  "description": "左右道 001–056 掉卡順序、星等／簽卡與四星前普卡數追蹤工具"
+}
