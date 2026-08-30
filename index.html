@@ -63,6 +63,11 @@
     .four-track-now span{font-size:12px;color:var(--muted);font-weight:700}
     .four-track-last{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.5}
     .four-track-last strong{color:#9b6a00}
+    .four-track-history{margin-top:10px;padding-top:9px;border-top:1px dashed var(--line);display:grid;gap:6px;max-height:170px;overflow:auto}
+    .four-track-history-title{font-size:11px;color:var(--muted);font-weight:900}
+    .four-track-history-item{font-size:11px;line-height:1.45;background:#fffaf0;border:1px solid #f1d27a;border-radius:10px;padding:7px 8px;color:#6e5522}
+    .four-track-history-item b{color:#8a5b00}
+    .four-track-history-empty{font-size:11px;color:var(--muted)}
     .four-event-list{display:grid;gap:7px;margin-top:10px}
     .four-event{border:1px solid #f1d27a;background:#fffaf0;border-radius:13px;padding:9px 10px;font-size:12px;line-height:1.45}
     .stat{background:#faf9ff;border:1px solid var(--line);border-radius:14px;padding:10px;text-align:center}
@@ -152,14 +157,16 @@
           <div class="four-track-head"><span>⬅️ 左道</span><span id="leftFourCount">0 次四星</span></div>
           <div class="four-track-now"><b id="leftNormalCount">0</b> <span>張普卡累積中</span></div>
           <div class="four-track-last" id="leftLastFour">尚未掉四星</div>
+          <div class="four-track-history" id="leftFourHistory"></div>
         </div>
         <div class="four-track-card right">
           <div class="four-track-head"><span>右道 ➡️</span><span id="rightFourCount">0 次四星</span></div>
           <div class="four-track-now"><b id="rightNormalCount">0</b> <span>張普卡累積中</span></div>
           <div class="four-track-last" id="rightLastFour">尚未掉四星</div>
+          <div class="four-track-history" id="rightFourHistory"></div>
         </div>
       </div>
-      <div class="tip">普卡目前以 2★、3★ 的一般版本計算；簽卡不算入普卡。每一道遇到 4★ 後，該道的普卡累積會重新從 0 開始。</div>
+      <div class="tip">普卡目前以 2★、3★ 的一般版本計算；簽卡不算入普卡。遇到 4★ 後只會把「目前累積」歸零，前面每一次「幾張普卡 → 四星」都會一直保留，直到你完成本局。</div>
     </section>
 
     <section class="panel">
@@ -307,19 +314,24 @@
 
   function fourStarTracking(list){
     const state={
-      left:{normal:0,events:[]},
-      right:{normal:0,events:[]}
+      left:{normal:0,currentCards:[],events:[]},
+      right:{normal:0,currentCards:[],events:[]}
     };
     const byIndex=new Map();
     list.forEach((x,i)=>{
       const laneState=state[x.lane];
       if(normalizeRarity(x)==='four'){
-        const event={index:i,card:x.card,lane:x.lane,normalBefore:laneState.normal,signed:isSignedRecord(x),time:x.time};
+        const event={
+          index:i,card:x.card,lane:x.lane,normalBefore:laneState.normal,
+          normalCardsBefore:[...laneState.currentCards],signed:isSignedRecord(x),time:x.time
+        };
         laneState.events.push(event);
         byIndex.set(i,event);
         laneState.normal=0;
+        laneState.currentCards=[];
       }else if(isNormalRecord(x)){
         laneState.normal+=1;
+        laneState.currentCards.push(x.card);
       }
     });
     return {state,byIndex};
@@ -334,10 +346,29 @@
     $('#rightFourCount').textContent=`${right.events.length} 次四星`;
     $('#leftLastFour').innerHTML=left.events.length ? lastFourText(left.events.at(-1)) : '尚未掉四星';
     $('#rightLastFour').innerHTML=right.events.length ? lastFourText(right.events.at(-1)) : '尚未掉四星';
+    renderLaneFourHistory($('#leftFourHistory'), left);
+    renderLaneFourHistory($('#rightFourHistory'), right);
   }
 
   function lastFourText(event){
     return `最近四星：<strong>${event.card}${event.signed?' ✍️':''}</strong>｜前面 ${event.normalBefore} 張普卡`;
+  }
+
+  function renderLaneFourHistory(container,laneState){
+    container.innerHTML='<div class="four-track-history-title">本局四星間隔紀錄（不會被下一次覆蓋）</div>';
+    if(!laneState.events.length){
+      container.insertAdjacentHTML('beforeend','<div class="four-track-history-empty">還沒有四星紀錄</div>');
+      return;
+    }
+    laneState.events.forEach((e,idx)=>{
+      const div=document.createElement('div');
+      div.className='four-track-history-item';
+      const cards=e.normalCardsBefore?.length
+        ? `<div style="margin-top:4px;color:var(--muted)">普卡：${e.normalCardsBefore.join(' → ')}</div>`
+        : '';
+      div.innerHTML=`<b>第 ${idx+1} 次｜${e.normalBefore} 張普卡 → ✨ ${e.card}${e.signed?' ✍️':''}</b>${cards}`;
+      container.appendChild(div);
+    });
   }
 
   function fillFourEvents(container,list){
@@ -347,7 +378,8 @@
     if(!events.length){ container.innerHTML='<span class="empty">這一局還沒有掉四星。</span>'; return; }
     events.forEach((e,n)=>{
       const div=document.createElement('div'); div.className='four-event';
-      div.innerHTML=`✨ <b>${laneLabel(e.lane)}道 ${e.card} 4★${e.signed?' ✍️':''}</b>｜前面 <b>${e.normalBefore}</b> 張普卡`;
+      const cards=e.normalCardsBefore?.length ? `｜普卡：${e.normalCardsBefore.join(' → ')}` : '';
+      div.innerHTML=`✨ <b>${laneLabel(e.lane)}道 ${e.card} 4★${e.signed?' ✍️':''}</b>｜前面 <b>${e.normalBefore}</b> 張普卡${cards}`;
       container.appendChild(div);
     });
   }
@@ -377,7 +409,8 @@
       if(r==='four'){
         const event=byIndex.get(i);
         const note=document.createElement('div'); note.className='four-note';
-        note.textContent=`四星掉卡｜${laneLabel(x.lane)}道前面掉了 ${event.normalBefore} 張普卡`;
+        const cards=event.normalCardsBefore?.length ? `｜${event.normalCardsBefore.join(' → ')}` : '';
+        note.textContent=`四星掉卡｜${laneLabel(x.lane)}道前面掉了 ${event.normalBefore} 張普卡${cards}`;
         row.appendChild(note);
       }
       container.appendChild(row);
@@ -387,7 +420,11 @@
   function laneSummaryHtml(list){
     const left=list.filter(x=>x.lane==='left').map(x=>`${x.card} ${rarityBadge(normalizeRarity(x))}${isSignedRecord(x)?'✍️':''}`).join(' → ') || '—';
     const right=list.filter(x=>x.lane==='right').map(x=>`${x.card} ${rarityBadge(normalizeRarity(x))}${isSignedRecord(x)?'✍️':''}`).join(' → ') || '—';
-    return `<b style="color:var(--purple)">左道：</b>${left}<br><b style="color:#df5a95">右道：</b>${right}`;
+    const tracking=fourStarTracking(list).state;
+    const intervalText = lane => tracking[lane].events.length
+      ? tracking[lane].events.map((e,i)=>`第${i+1}次：${e.normalBefore}張普卡→✨${e.card}${e.signed?'✍️':''}`).join('｜')
+      : '尚無四星';
+    return `<b style="color:var(--purple)">左道：</b>${left}<br><span style="color:var(--muted)">四星間隔：${intervalText('left')}</span><br><br><b style="color:#df5a95">右道：</b>${right}<br><span style="color:var(--muted)">四星間隔：${intervalText('right')}</span>`;
   }
 
   function makeSession(){
@@ -419,7 +456,7 @@
 
   function exportText(list=records){
     const tracking=fourStarTracking(list);
-    const lines=list.map((x,i)=>{ const r=normalizeRarity(x); const fourNote=r==='four' ? `・前 ${tracking.byIndex.get(i).normalBefore} 張普卡` : ''; return `${i+1}. ${laneLabel(x.lane)}道 ${x.card} ${rarityLabel(r)}${isSignedRecord(x)?'・✍️ 簽卡':''}${fourNote}`; });
+    const lines=list.map((x,i)=>{ const r=normalizeRarity(x); const e=r==='four' ? tracking.byIndex.get(i) : null; const fourNote=e ? `・前 ${e.normalBefore} 張普卡${e.normalCardsBefore?.length ? `（${e.normalCardsBefore.join(' → ')}）` : ''}` : ''; return `${i+1}. ${laneLabel(x.lane)}道 ${x.card} ${rarityLabel(r)}${isSignedRecord(x)?'・✍️ 簽卡':''}${fourNote}`; });
     const left=list.filter(x=>x.lane==='left').map(x=>`${x.card} ${rarityBadge(normalizeRarity(x))}${isSignedRecord(x)?'✍️':''}`).join(' → ');
     const right=list.filter(x=>x.lane==='right').map(x=>`${x.card} ${rarityBadge(normalizeRarity(x))}${isSignedRecord(x)?'✍️':''}`).join(' → ');
     return `掉卡順序紀錄\n${lines.join('\n')}\n\n左道：${left||'—'}\n右道：${right||'—'}`;
@@ -428,7 +465,7 @@
   function csvEscape(v){const s=String(v); return /[",\n]/.test(s)?`"${s.replaceAll('"','""')}"`:s;}
   function exportCSV(){
     const tracking=fourStarTracking(records);
-    const rows=[['順序','道','卡號','星等','簽卡','四星前普卡數','時間'],...records.map((x,i)=>{ const r=normalizeRarity(x); return [i+1,laneLabel(x.lane),x.card,rarityLabel(r),isSignedRecord(x)?'是':'否',r==='four'?tracking.byIndex.get(i).normalBefore:'',fullText(new Date(x.time))]; })];
+    const rows=[['順序','道','卡號','星等','簽卡','四星前普卡數','四星前普卡卡號','時間'],...records.map((x,i)=>{ const r=normalizeRarity(x); const e=r==='four'?tracking.byIndex.get(i):null; return [i+1,laneLabel(x.lane),x.card,rarityLabel(r),isSignedRecord(x)?'是':'否',e?e.normalBefore:'',e?e.normalCardsBefore.join(' → '):'',fullText(new Date(x.time))]; })];
     const csv='\uFEFF'+rows.map(r=>r.map(csvEscape).join(',')).join('\n');
     const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`掉卡紀錄_${Date.now()}.csv`; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
