@@ -84,7 +84,9 @@ function deleteSession_(id) {
 }
 function doPost(e) {
   try {
-    const p=JSON.parse(e.postData.contents);
+    // Supports both legacy JSON body and cross-origin HTML form submission.
+    const raw=(e.parameter&&e.parameter.payload)||e.postData.contents;
+    const p=JSON.parse(raw);
     authorize_(p.key);
     const lock=LockService.getScriptLock();lock.waitLock(25000);
     try{
@@ -93,7 +95,7 @@ function doPost(e) {
       else throw new Error('不支援的操作');
     }finally{lock.releaseLock();}
     return ContentService.createTextOutput(JSON.stringify({ok:true})).setMimeType(ContentService.MimeType.JSON);
-  }catch(err){return ContentService.createTextOutput(JSON.stringify({ok:false,error:String(err.message)})).setMimeType(ContentService.MimeType.JSON);}
+  }catch(err){console.error('doPost 寫入失敗: '+String(err.stack||err));return ContentService.createTextOutput(JSON.stringify({ok:false,error:String(err.message)})).setMimeType(ContentService.MimeType.JSON);}
 }
 function doGet(e) {
   const cb=String(e.parameter.callback||'');
