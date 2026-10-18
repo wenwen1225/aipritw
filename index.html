@@ -274,7 +274,37 @@
     });
   }
   async function writeCloud(payload){
-    await fetch(cloudConfig.url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({...payload,key:cloudConfig.key})});
+    // HTML form POST works even when cross-origin fetch is blocked by the browser.
+    // The GAS response is cross-origin; subsequent readCloud() verifies persistence.
+    return new Promise((resolve,reject)=>{
+      const id='cloud_post_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+      const frame=document.createElement('iframe');
+      frame.name=id;frame.setAttribute('title','雲端儲存背景傳輸');
+      frame.style.cssText='position:absolute;width:0;height:0;border:0;opacity:0;pointer-events:none';
+      const form=document.createElement('form');
+      form.method='POST';form.action=cloudConfig.url;form.target=id;
+      form.acceptCharset='UTF-8';
+      form.style.display='none';
+      const field=document.createElement('input');
+      field.type='hidden';field.name='payload';
+      field.value=JSON.stringify({...payload,key:cloudConfig.key});
+      form.appendChild(field);
+      let finished=false,started=false;
+      const done=(error)=>{
+        if(finished)return;finished=true;clearTimeout(timer);
+        setTimeout(()=>{form.remove();frame.remove();},1000);
+        error?reject(error):resolve();
+      };
+      frame.addEventListener('load',()=>{
+        if(!started)return;
+        done();
+      });
+      frame.addEventListener('error',()=>done(new Error('GAS 表單傳輸被瀏覽器阻擋')));
+      document.body.appendChild(frame);document.body.appendChild(form);
+      const timer=setTimeout(()=>done(new Error('傳送逾時，請檢查瀏覽器或 GAS 部署')),30000);
+      started=true;
+      form.submit();
+    });
   }
   async function syncCloud(){
     if(cloudBusy)return;
