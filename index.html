@@ -246,6 +246,7 @@
   const draft=load(STORE_DRAFT,null);
   let records=Array.isArray(draft?.records)?draft.records:[];
   let sessionStartedAt=draft?.startedAt&&!isNaN(Date.parse(draft.startedAt))?new Date(draft.startedAt):new Date();
+  const DEFAULT_CLOUD_URL = 'https://script.google.com/macros/s/AKfycbzVH590xEb1zqSQVz2DOvfZEYoiG4UgHCwhB54DvkzXYUbhKpwTjICCLIoKVra8tlQu-A/exec';
   let cloudConfig=load(STORE_CLOUD,null);
   let deletedIds=load(STORE_DELETED,[]);
   let cloudBusy=false;
@@ -546,7 +547,7 @@
     if(cloudReady())syncCloud();
   });
   $('#cloudSetupBtn').addEventListener('click',()=>{
-    const url=prompt('請貼上 Google Apps Script 的 /exec 網址',cloudConfig?.url||'');
+    const url=prompt('請確認 Google Apps Script 的 /exec 網址',cloudConfig?.url||DEFAULT_CLOUD_URL);
     if(url===null||!url.trim())return;
     if(!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url.trim())){toast('GAS 網址格式不正確');return;}
     const key=prompt('請貼上 setupCloud() 執行記錄中的同步金鑰',cloudConfig?.key||'');
