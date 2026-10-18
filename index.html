@@ -170,7 +170,7 @@
     </section>
 
     <section class="panel">
-      <div class="panel-title">歷史紀錄</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin:9px 0;align-items:center"><button class="text-btn" id="cloudSetupBtn">☁ 雲端設定</button><button class="text-btn" id="cloudSyncBtn">↻ 同步雲端</button><span id="cloudStatus" style="font-size:11px;color:var(--muted)">本機儲存模式</span></div>
+      <div class="panel-title">歷史紀錄</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin:9px 0;align-items:center"><button class="text-btn" id="cloudSetupBtn">☁ 雲端設定</button><button class="text-btn" id="cloudSyncBtn">↻ 同步雲端</button><span id="cloudStatus" role="status" aria-live="polite" style="font-size:11px;color:var(--muted);overflow-wrap:anywhere;line-height:1.6">本機儲存模式</span></div>
       <div class="history-list" id="historyList"></div>
     </section>
   </main>
@@ -256,7 +256,8 @@
   function load(key, fallback){ try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
   function save(key, value){ localStorage.setItem(key, JSON.stringify(value)); }
   function saveDraft(){save(STORE_DRAFT,{startedAt:sessionStartedAt.toISOString(),records});}
-  function cloudStatus(msg){$('#cloudStatus').textContent=msg;}
+  function cloudStatus(msg){const el=$('#cloudStatus');el.textContent=msg;el.title=msg;}
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   function cloudReady(){return cloudConfig&&/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(cloudConfig.url)&&!!cloudConfig.key;}
   function readCloud(){
     return new Promise((resolve,reject)=>{
@@ -291,11 +292,26 @@
           await writeCloud({action:'save',session:entry});
         }
       }
-      cloudStatus('確認同步結果中…');
-      const after=await readCloud();
-      const confirmed=new Set(after.sessions.map(x=>x.id));
-      const tombstones=new Set(after.deleted);
-      if(deletedIds.some(id=>!tombstones.has(id))||history.some(x=>!deleted.has(x.id)&&!confirmed.has(x.id)))throw new Error('部分資料未寫入，請再同步');
+      // GAS POST 以 no-cors 發送，瀏覽器無法取得後端回應；
+      // 因此以後端查詢確認結果，並允許 Spreadsheet 寫入延遲。
+      let after, missingSaves=[],missingDeletes=[];
+      for(let attempt=1;attempt<=5;attempt++){
+        cloudStatus('驗證 Google Sheets 寫入（第 '+attempt+'/5 次）…');
+        await sleep(attempt===1?1200:attempt*1800);
+        after=await readCloud();
+        const confirmed=new Set(after.sessions.map(x=>x.id));
+        const tombstones=new Set(after.deleted);
+        missingDeletes=deletedIds.filter(id=>!tombstones.has(id));
+        missingSaves=history.filter(x=>!deleted.has(x.id)&&!confirmed.has(x.id));
+        if(!missingSaves.length&&!missingDeletes.length)break;
+      }
+      if(missingSaves.length||missingDeletes.length){
+        const message='Google Sheets 尚未確認寫入：'
+          +(missingSaves.length?'未找到 '+missingSaves.length+' 局（ID: '+missingSaves.slice(0,2).map(x=>x.id.slice(0,8)).join('、')+'）':'')
+          +(missingDeletes.length?'；未確認刪除 '+missingDeletes.length+' 局':'')
+          +'。資料仍保留本機。請到 Apps Script → 執行項目，查看 doPost 是否有執行或報錯；確認後可再按「同步雲端」。';
+        throw new Error(message);
+      }
       const merged=new Map();
       [...after.sessions,...history].forEach(x=>{if(!tombstones.has(x.id)&&!deleted.has(x.id))merged.set(x.id,x);});
       history=[...merged.values()].sort((a,b)=>b.startedAt.localeCompare(a.startedAt));
