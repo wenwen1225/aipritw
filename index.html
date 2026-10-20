@@ -335,7 +335,7 @@
     try{
       cloudStatus('讀取雲端中…');
       const before=await readCloud();
-      if(before.schemaVersion!==3)throw new Error('請先將 GAS 後端更新至 v3，分類紀錄暫保留本機');
+      if(before.schemaVersion!==4)throw new Error('請先將 GAS 後端更新至 v4，原有本機紀錄暫保留');
       const deleted=new Set([...before.deleted,...deletedIds]);
       const remoteIds=new Set(before.sessions.map(x=>x.id));
       for(const id of deletedIds){if(!before.deleted.includes(id))await writeCloud({action:'delete',id});}
@@ -633,12 +633,25 @@
   $('#copyBtn').addEventListener('click',async()=>{ try{ await navigator.clipboard.writeText(exportText()); toast('已複製'); }catch{ toast('瀏覽器不允許自動複製'); } });
   $('#csvBtn').addEventListener('click',exportCSV);
   $('#closeHistoryBtn').addEventListener('click',()=>$('#historyOverlay').classList.remove('show'));
-  $('#deleteHistoryBtn').addEventListener('click',()=>{
-    if(!selectedHistoryId||!confirm('確定刪除這局？雲端同步後也會刪除。'))return;
-    deletedIds=[...new Set([...deletedIds,selectedHistoryId])];save(STORE_DELETED,deletedIds);
-    history=history.filter(x=>x.id!==selectedHistoryId);save(STORE_HISTORY,history);
-    $('#historyOverlay').classList.remove('show');renderHistory();toast('本機已刪除');
-    if(cloudReady())syncCloud();
+  $('#deleteHistoryBtn').addEventListener('click',async()=>{
+    if(!selectedHistoryId||cloudBusy)return;
+    const id=selectedHistoryId;
+    const record=history.find(x=>x.id===id);
+    if(!record)return;
+    const answer=prompt('永久刪除這局（'+record.records.length+' 張）會同時移除 Google Sheets 局數及卡片明細。系統會先備份，無法從網頁復原。請輸入「永久刪除」確認：');
+    if(answer!=='永久刪除'){if(answer!==null)toast('未刪除，確認文字不相符');return;}
+    if(!cloudReady()){toast('雲端尚未連線，沒有刪除資料');return;}
+    try {
+      cloudStatus('確認永久刪除後端版本中…');
+      const remote=await readCloud();
+      if(remote.schemaVersion!==4)throw new Error('請先部署 GAS v4，未刪除資料');
+      // Retain tombstone locally until the backend confirms the deletion.
+      deletedIds=[...new Set([...deletedIds,id])];save(STORE_DELETED,deletedIds);
+      history=history.filter(x=>x.id!==id);save(STORE_HISTORY,history);
+      $('#historyOverlay').classList.remove('show');renderHistory();
+      cloudStatus('永久刪除送出中，等待雲端確認…');
+      await syncCloud();
+    } catch(err) {cloudStatus('⚠ '+err.message);toast('未送出刪除：'+err.message);}
   });
   $('#cloudSetupBtn').addEventListener('click',()=>{cloudStatus('使用自動雲端連線');syncCloud();});
   $('#cloudSyncBtn').addEventListener('click',syncCloud);
