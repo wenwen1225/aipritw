@@ -190,7 +190,7 @@
     </section>
 
     <section class="panel">
-      <div class="panel-title">歷史紀錄</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin:9px 0;align-items:center"><button class="text-btn" id="cloudSetupBtn">☁ 雲端狀態</button><button class="text-btn" id="cloudSyncBtn">↻ 同步雲端</button><button class="text-btn" id="versionCheckBtn">ⓘ 檢查版本</button><span id="cloudStatus" role="status" aria-live="polite" style="font-size:11px;color:var(--muted);overflow-wrap:anywhere;line-height:1.6">本機儲存模式</span></div>
+      <div class="panel-title">歷史紀錄</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin:9px 0;align-items:center"><button class="text-btn" id="cloudSetupBtn">⚙ GAS 連線設定</button><button class="text-btn" id="cloudSyncBtn">↻ 同步雲端</button><button class="text-btn" id="versionCheckBtn">ⓘ 檢查版本</button><span id="cloudStatus" role="status" aria-live="polite" style="font-size:11px;color:var(--muted);overflow-wrap:anywhere;line-height:1.6">本機儲存模式</span></div>
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:8px 0 12px">
         <select id="historySeason" aria-label="篩選季數" style="min-width:0;width:100%;padding:9px 4px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--text)"><option value="">全部季數</option></select>
         <select id="historyWave" aria-label="篩選彈數" style="min-width:0;width:100%;padding:9px 4px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--text)"><option value="">全部彈數</option></select>
@@ -260,7 +260,7 @@
   const rarityBadge = r => r === 'four' ? '4★' : r === 'three' ? '3★' : '2★';
   const rarityEmoji = r => r === 'four' ? '⭐' : '';
   const laneLabel = l => l === 'left' ? '左' : '右';
-  const FRONTEND_VERSION = '1.6.0';
+  const FRONTEND_VERSION = '1.6.1';
   const EXPECTED_BACKEND_SCHEMA = 4;
   const STORE_HISTORY = 'cardDropTracker.history.v1';
   const STORE_DRAFT = 'cardDropTracker.draft.v1';
@@ -275,7 +275,7 @@
   let records=Array.isArray(draft?.records)?draft.records:[];
   let sessionStartedAt=draft?.startedAt&&!isNaN(Date.parse(draft.startedAt))?new Date(draft.startedAt):new Date();
   const DEFAULT_CLOUD_URL = 'https://script.google.com/macros/s/AKfycbzVH590xEb1zqSQVz2DOvfZEYoiG4UgHCwhB54DvkzXYUbhKpwTjICCLIoKVra8tlQu-A/exec';
-  let cloudConfig={url:DEFAULT_CLOUD_URL};
+  let cloudConfig={url:(load(STORE_CLOUD,null)?.url||DEFAULT_CLOUD_URL)};
   let deletedIds=load(STORE_DELETED,[]);
   let cloudBusy=false;
   let history = load(STORE_HISTORY, []);
@@ -715,7 +715,29 @@
       out.textContent='版本檢查失敗：'+err.message+'（不影響本機紀錄）';
     }finally{btn.disabled=false;}
   }
-  $('#cloudSetupBtn').addEventListener('click',()=>{cloudStatus('使用自動雲端連線');syncCloud();});
+  $('#cloudSetupBtn').addEventListener('click',async()=>{
+    if(cloudBusy){toast('正在同步，請稍後再設定');return;}
+    const answer=prompt('貼上 GAS 網頁應用程式的 /exec 網址（每台裝置設定一次，不需要同步金鑰）',cloudConfig.url||DEFAULT_CLOUD_URL);
+    if(answer===null)return;
+    const next=answer.trim();
+    if(!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(next)){
+      cloudStatus('⚠ GAS 網址格式不正確；原設定保留');return;
+    }
+    const previous={...cloudConfig};
+    cloudConfig={url:next};
+    $('#cloudSetupBtn').disabled=true;
+    cloudStatus('正在測試新的 GAS 連線…');
+    try{
+      const remote=await readCloud();
+      if(Number(remote.schemaVersion)!==EXPECTED_BACKEND_SCHEMA)throw new Error('後端資料介面需要 v'+EXPECTED_BACKEND_SCHEMA+'，目前為 '+(remote.schemaVersion??'未提供'));
+      save(STORE_CLOUD,{url:next});
+      cloudStatus('✓ GAS 網址已儲存，開始同步');
+      await syncCloud();
+    }catch(error){
+      cloudConfig=previous;
+      cloudStatus('⚠ '+(error.message||'連線失敗')+'；已保留原 GAS 設定及本機紀錄');
+    }finally{$('#cloudSetupBtn').disabled=false;}
+  });
   $('#versionCheckBtn').addEventListener('click',checkVersions);
   $('#cloudSyncBtn').addEventListener('click',syncCloud);
   [$('#resultOverlay'),$('#historyOverlay')].forEach(ov=>ov.addEventListener('click',e=>{if(e.target===ov)ov.classList.remove('show')}));
