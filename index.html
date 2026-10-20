@@ -1,12 +1,12 @@
 <!doctype html>
 <html lang="zh-Hant">
 <head>
-  <link rel="icon" type="image/svg+xml" href="app-icon.svg">
-  <link rel="apple-touch-icon" href="app-icon.svg">
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#7c5cff" />
   <title>掉卡順序紀錄器</title>
+  <link rel="icon" type="image/svg+xml" href="app-icon.svg">
+  <link rel="apple-touch-icon" href="app-icon.svg">
   <link rel="manifest" href="manifest.webmanifest" />
   <style>
     :root{
@@ -172,7 +172,7 @@
     </section>
 
     <section class="panel">
-      <div class="panel-title">歷史紀錄</div>
+      <div class="panel-title">歷史紀錄</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin:9px 0;align-items:center"><button class="text-btn" id="cloudSetupBtn">☁ 雲端設定</button><button class="text-btn" id="cloudSyncBtn">↻ 同步雲端</button><span id="cloudStatus" role="status" aria-live="polite" style="font-size:11px;color:var(--muted);overflow-wrap:anywhere;line-height:1.6">本機儲存模式</span></div>
       <div class="history-list" id="historyList"></div>
     </section>
   </main>
@@ -239,16 +239,120 @@
   const rarityEmoji = r => r === 'four' ? '⭐' : '';
   const laneLabel = l => l === 'left' ? '左' : '右';
   const STORE_HISTORY = 'cardDropTracker.history.v1';
+  const STORE_DRAFT = 'cardDropTracker.draft.v1';
+  const STORE_CLOUD = 'cardDropTracker.cloudConfig.v1';
+  const STORE_DELETED = 'cardDropTracker.deletedIds.v1';
 
   let lane = 'left';
   let signed = false;
-  let records = [];
-  let sessionStartedAt = new Date();
+  const draft=load(STORE_DRAFT,null);
+  let records=Array.isArray(draft?.records)?draft.records:[];
+  let sessionStartedAt=draft?.startedAt&&!isNaN(Date.parse(draft.startedAt))?new Date(draft.startedAt):new Date();
+  const DEFAULT_CLOUD_URL = 'https://script.google.com/macros/s/AKfycbzVH590xEb1zqSQVz2DOvfZEYoiG4UgHCwhB54DvkzXYUbhKpwTjICCLIoKVra8tlQu-A/exec';
+  let cloudConfig=load(STORE_CLOUD,null);
+  let deletedIds=load(STORE_DELETED,[]);
+  let cloudBusy=false;
   let history = load(STORE_HISTORY, []);
   let selectedHistoryId = null;
 
   function load(key, fallback){ try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
   function save(key, value){ localStorage.setItem(key, JSON.stringify(value)); }
+  function saveDraft(){save(STORE_DRAFT,{startedAt:sessionStartedAt.toISOString(),records});}
+  function cloudStatus(msg){const el=$('#cloudStatus');el.textContent=msg;el.title=msg;}
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  function cloudReady(){return cloudConfig&&/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(cloudConfig.url)&&!!cloudConfig.key;}
+  function readCloud(){
+    return new Promise((resolve,reject)=>{
+      if(!cloudReady())return reject(new Error('尚未設定雲端'));
+      const name='cloudCallback_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+      const script=document.createElement('script');
+      let done=false;
+      const finish=(err,data)=>{if(done)return;done=true;clearTimeout(timer);delete window[name];script.remove();err?reject(err):resolve(data);};
+      const timer=setTimeout(()=>finish(new Error('雲端讀取逾時')),25000);
+      window[name]=data=>data?.ok?finish(null,data):finish(new Error(data?.error||'讀取失敗'));
+      script.onerror=()=>finish(new Error('無法連接 GAS，請確認部署權限'));
+      script.src=cloudConfig.url+'?action=list&key='+encodeURIComponent(cloudConfig.key)+'&callback='+name;
+      document.head.appendChild(script);
+    });
+  }
+  async function writeCloud(payload){
+    // HTML form POST works even when cross-origin fetch is blocked by the browser.
+    // The GAS response is cross-origin; subsequent readCloud() verifies persistence.
+    return new Promise((resolve,reject)=>{
+      const id='cloud_post_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+      const frame=document.createElement('iframe');
+      frame.name=id;frame.setAttribute('title','雲端儲存背景傳輸');
+      frame.style.cssText='position:absolute;width:0;height:0;border:0;opacity:0;pointer-events:none';
+      const form=document.createElement('form');
+      form.method='POST';form.action=cloudConfig.url;form.target=id;
+      form.acceptCharset='UTF-8';
+      form.style.display='none';
+      const field=document.createElement('input');
+      field.type='hidden';field.name='payload';
+      field.value=JSON.stringify({...payload,key:cloudConfig.key});
+      form.appendChild(field);
+      let finished=false,started=false;
+      const done=(error)=>{
+        if(finished)return;finished=true;clearTimeout(timer);
+        setTimeout(()=>{form.remove();frame.remove();},1000);
+        error?reject(error):resolve();
+      };
+      frame.addEventListener('load',()=>{
+        if(!started)return;
+        done();
+      });
+      frame.addEventListener('error',()=>done(new Error('GAS 表單傳輸被瀏覽器阻擋')));
+      document.body.appendChild(frame);document.body.appendChild(form);
+      const timer=setTimeout(()=>done(new Error('傳送逾時，請檢查瀏覽器或 GAS 部署')),30000);
+      started=true;
+      form.submit();
+    });
+  }
+  async function syncCloud(){
+    if(cloudBusy)return;
+    if(!cloudReady()){toast('請先設定雲端');return;}
+    cloudBusy=true;$('#cloudSyncBtn').disabled=true;
+    try{
+      cloudStatus('讀取雲端中…');
+      const before=await readCloud();
+      const deleted=new Set([...before.deleted,...deletedIds]);
+      const remoteIds=new Set(before.sessions.map(x=>x.id));
+      for(const id of deletedIds){if(!before.deleted.includes(id))await writeCloud({action:'delete',id});}
+      for(const entry of history){
+        if(!deleted.has(entry.id)&&!remoteIds.has(entry.id)){
+          cloudStatus('上傳本機紀錄中…');
+          await writeCloud({action:'save',session:entry});
+        }
+      }
+      // GAS POST 以 no-cors 發送，瀏覽器無法取得後端回應；
+      // 因此以後端查詢確認結果，並允許 Spreadsheet 寫入延遲。
+      let after, missingSaves=[],missingDeletes=[];
+      for(let attempt=1;attempt<=5;attempt++){
+        cloudStatus('驗證 Google Sheets 寫入（第 '+attempt+'/5 次）…');
+        await sleep(attempt===1?1200:attempt*1800);
+        after=await readCloud();
+        const confirmed=new Set(after.sessions.map(x=>x.id));
+        const tombstones=new Set(after.deleted);
+        missingDeletes=deletedIds.filter(id=>!tombstones.has(id));
+        missingSaves=history.filter(x=>!deleted.has(x.id)&&!confirmed.has(x.id));
+        if(!missingSaves.length&&!missingDeletes.length)break;
+      }
+      if(missingSaves.length||missingDeletes.length){
+        const message='Google Sheets 尚未確認寫入：'
+          +(missingSaves.length?'未找到 '+missingSaves.length+' 局（ID: '+missingSaves.slice(0,2).map(x=>x.id.slice(0,8)).join('、')+'）':'')
+          +(missingDeletes.length?'；未確認刪除 '+missingDeletes.length+' 局':'')
+          +'。資料仍保留本機。請到 Apps Script → 執行項目，查看 doPost 是否有執行或報錯；確認後可再按「同步雲端」。';
+        throw new Error(message);
+      }
+      const merged=new Map();
+      [...after.sessions,...history].forEach(x=>{if(!tombstones.has(x.id)&&!deleted.has(x.id))merged.set(x.id,x);});
+      history=[...merged.values()].sort((a,b)=>b.startedAt.localeCompare(a.startedAt));
+      save(STORE_HISTORY,history);
+      deletedIds=[];save(STORE_DELETED,deletedIds);
+      renderHistory();cloudStatus('✓ 同步完成，共 '+history.length+' 局');toast('雲端同步完成');
+    }catch(err){cloudStatus('⚠ '+err.message+'；本機紀錄保留');toast('雲端同步未完成');}
+    finally{cloudBusy=false;$('#cloudSyncBtn').disabled=false;}
+  }
   function nowText(date = new Date()){
     return new Intl.DateTimeFormat('zh-TW',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(date);
   }
@@ -277,6 +381,7 @@
     const laneAtDrop=lane;
     const before=fourStarTracking(records).state[laneAtDrop].normal;
     records.push({card,lane:laneAtDrop,rarity,signed,time:new Date().toISOString()});
+    saveDraft();
     const wasSigned=signed;
     setSigned(false);
     renderCurrent();
@@ -434,9 +539,9 @@
   }
 
   function saveAndNew(){
-    const session=makeSession(); history.unshift(session); history=history.slice(0,100); save(STORE_HISTORY,history);
-    records=[]; sessionStartedAt=new Date(); setLane('left'); setSigned(false);
-    $('#resultOverlay').classList.remove('show'); renderCurrent(); renderHistory(); toast('本局已儲存');
+    const session=makeSession(); history.unshift(session); save(STORE_HISTORY,history);
+    records=[]; sessionStartedAt=new Date(); saveDraft(); setLane('left'); setSigned(false);
+    $('#resultOverlay').classList.remove('show'); renderCurrent(); renderHistory(); toast('本局已存於本機'); if(cloudReady())syncCloud();
   }
 
   function renderHistory(){
@@ -475,17 +580,33 @@
   $('#leftLane').addEventListener('click',()=>setLane('left'));
   $('#rightLane').addEventListener('click',()=>setLane('right'));
   $$('.sign-btn').forEach(b=>b.addEventListener('click',()=>setSigned(b.dataset.sign==='true')));
-  $('#undoBtn').addEventListener('click',()=>{ if(records.length){ const x=records.pop(); renderCurrent(); toast(`已撤銷 ${laneLabel(x.lane)}道 ${x.card}`); } });
+  $('#undoBtn').addEventListener('click',()=>{ if(records.length){ const x=records.pop(); saveDraft(); renderCurrent(); toast(`已撤銷 ${laneLabel(x.lane)}道 ${x.card}`); } });
   $('#finishBtn').addEventListener('click',openResult);
   $('#closeResultBtn').addEventListener('click',()=>$('#resultOverlay').classList.remove('show'));
   $('#saveNextBtn').addEventListener('click',saveAndNew);
   $('#copyBtn').addEventListener('click',async()=>{ try{ await navigator.clipboard.writeText(exportText()); toast('已複製'); }catch{ toast('瀏覽器不允許自動複製'); } });
   $('#csvBtn').addEventListener('click',exportCSV);
   $('#closeHistoryBtn').addEventListener('click',()=>$('#historyOverlay').classList.remove('show'));
-  $('#deleteHistoryBtn').addEventListener('click',()=>{ if(!selectedHistoryId)return; history=history.filter(x=>x.id!==selectedHistoryId);save(STORE_HISTORY,history);$('#historyOverlay').classList.remove('show');renderHistory();toast('已刪除歷史紀錄'); });
+  $('#deleteHistoryBtn').addEventListener('click',()=>{
+    if(!selectedHistoryId||!confirm('確定刪除這局？雲端同步後也會刪除。'))return;
+    deletedIds=[...new Set([...deletedIds,selectedHistoryId])];save(STORE_DELETED,deletedIds);
+    history=history.filter(x=>x.id!==selectedHistoryId);save(STORE_HISTORY,history);
+    $('#historyOverlay').classList.remove('show');renderHistory();toast('本機已刪除');
+    if(cloudReady())syncCloud();
+  });
+  $('#cloudSetupBtn').addEventListener('click',()=>{
+    const url=prompt('請確認 Google Apps Script 的 /exec 網址',cloudConfig?.url||DEFAULT_CLOUD_URL);
+    if(url===null||!url.trim())return;
+    if(!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url.trim())){toast('GAS 網址格式不正確');return;}
+    const key=prompt('請貼上 setupCloud() 執行記錄中的同步金鑰',cloudConfig?.key||'');
+    if(key===null||!key.trim())return;
+    cloudConfig={url:url.trim(),key:key.trim()};save(STORE_CLOUD,cloudConfig);cloudStatus('已設定，開始同步');syncCloud();
+  });
+  $('#cloudSyncBtn').addEventListener('click',syncCloud);
   [$('#resultOverlay'),$('#historyOverlay')].forEach(ov=>ov.addEventListener('click',e=>{if(e.target===ov)ov.classList.remove('show')}));
 
-  renderCards(); renderCurrent(); renderHistory();
+  renderCards(); renderCurrent(); renderHistory(); saveDraft();
+  if(cloudReady()){cloudStatus('已設定，正在同步…');syncCloud();}
   if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 })();
 </script>
