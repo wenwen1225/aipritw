@@ -156,7 +156,7 @@
 
     <section class="panel">
       <div class="panel-title">最近掉卡</div>
-      <div class="recent" id="recentList"><span class="empty">還沒有紀錄</span></div>
+      <div class="recent" id="recentList"><span class="empty">還沒有紀錄</span></div><div class="tip">點選最近掉卡可快速修正卡號、左右道與簽卡；不影響已完成的歷史紀錄。</div>
     </section>
 
     <section class="panel">
@@ -191,7 +191,11 @@
 
     <section class="panel">
       <div class="panel-title">歷史紀錄</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin:9px 0;align-items:center"><button class="text-btn" id="cloudSetupBtn">☁ 雲端狀態</button><button class="text-btn" id="cloudSyncBtn">↻ 同步雲端</button><span id="cloudStatus" role="status" aria-live="polite" style="font-size:11px;color:var(--muted);overflow-wrap:anywhere;line-height:1.6">本機儲存模式</span></div>
-      <div class="history-list" id="historyList"></div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:8px 0 12px">
+        <select id="historySeason" aria-label="篩選季數" style="min-width:0;width:100%;padding:9px 4px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--text)"><option value="">全部季數</option></select>
+        <select id="historyWave" aria-label="篩選彈數" style="min-width:0;width:100%;padding:9px 4px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--text)"><option value="">全部彈數</option></select>
+        <select id="historyEdition" aria-label="篩選版本" style="min-width:0;width:100%;padding:9px 4px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--text)"><option value="">全部版本</option><option value="台版">台版</option><option value="韓版">韓版</option><option value="日版">日版</option></select>
+      </div><div class="history-list" id="historyList"></div>
     </section>
   </main>
 
@@ -440,12 +444,27 @@
     const recent=$('#recentList'); recent.innerHTML='';
     if(!records.length){ recent.innerHTML='<span class="empty">還沒有紀錄</span>'; return; }
     records.slice(-8).reverse().forEach((x,idx)=>{
-      const c=document.createElement('span'); const r=normalizeRarity(x); c.className=`chip ${x.lane}${r==='four'?' four-hit':''}`;
+      const c=document.createElement('button');const r=normalizeRarity(x);const index=records.length-1-idx;
+      c.type='button';c.className=`chip ${x.lane}${r==='four'?' four-hit':''}`;
+      c.style.cursor='pointer';
+      c.title='點選即可修正這張卡';c.setAttribute('aria-label','修正第 '+(index+1)+' 張卡');
       c.textContent=`${records.length-idx}. ${r==='four'?'✨ ':''}${laneLabel(x.lane)}${x.card} ${rarityBadge(r)}${isSignedRecord(x)?'✍️':''}`;
+      c.addEventListener('click',()=>editRecentRecord(index));
       recent.appendChild(c);
     });
   }
 
+  function editRecentRecord(index){
+    const entry=records[index];if(!entry)return;
+    const prior=entry.card+' '+(entry.lane==='left'?'左':'右')+(entry.signed?' 簽':'');
+    const value=prompt('修改第 '+(index+1)+' 張：輸入卡號和左／右，可加「簽」表示簽卡。例：035 左 或 017 右 簽',prior);
+    if(value===null)return;
+    const input=value.trim().match(/^(\d{1,3})\s*(左|右)(?:\s*(簽))?$/);
+    if(!input||Number(input[1])<1||Number(input[1])>56){toast('格式錯誤，請輸入如 035 左 或 017 右 簽');return;}
+    const card=pad(Number(input[1]));
+    records[index]={...entry,card,lane:input[2]==='左'?'left':'right',signed:!!input[3],rarity:rarityForCard(card)};
+    saveDraft();renderCurrent();toast('第 '+(index+1)+' 張已修正');
+  }
   function setLane(next){
     lane=next; $('#leftLane').classList.toggle('active',lane==='left'); $('#rightLane').classList.toggle('active',lane==='right');
   }
@@ -582,9 +601,11 @@
 
   function categoryLabel(s){return s.season&&s.wave&&s.edition?`第${s.season}季・第${s.wave}彈・${s.edition}`:'未分類';}
   function renderHistory(){
-    const box=$('#historyList'); box.innerHTML='';
-    if(!history.length){ box.innerHTML='<span class="empty">完成一局後，紀錄會保存在這裡。</span>'; return; }
-    history.slice(0,8).forEach(s=>{
+    const box=$('#historyList');box.innerHTML='';
+    const season=$('#historySeason').value,wave=$('#historyWave').value,edition=$('#historyEdition').value;
+    const filtered=history.filter(s=>(!season||String(s.season)===season)&&(!wave||String(s.wave)===wave)&&(!edition||s.edition===edition));
+    if(!filtered.length){box.innerHTML='<span class="empty">沒有符合條件的歷史紀錄。</span>';return;}
+    filtered.slice(0,30).forEach(s=>{
       const rare=s.records.filter(isSignedRecord).length;
       const item=document.createElement('div'); item.className='history-item';
       item.innerHTML=`<div class="history-head"><b>${nowText(new Date(s.startedAt))}・${s.records.length} 張</b><button class="text-btn">查看</button></div><div class="history-summary">${categoryLabel(s)}｜左 ${s.records.filter(x=>x.lane==='left').length}｜右 ${s.records.filter(x=>x.lane==='right').length}｜簽卡 ${rare}</div>`;
@@ -623,6 +644,9 @@
     }
   }
   initCategory();
+  for(let n=1;n<=10;n++)$('#historySeason').add(new Option('第 '+n+' 季',String(n)));
+  for(let n=1;n<=6;n++)$('#historyWave').add(new Option('第 '+n+' 彈',String(n)));
+  ['#historySeason','#historyWave','#historyEdition'].forEach(id=>$(id).addEventListener('change',renderHistory));
   $('#leftLane').addEventListener('click',()=>setLane('left'));
   $('#rightLane').addEventListener('click',()=>setLane('right'));
   $$('.sign-btn').forEach(b=>b.addEventListener('click',()=>setSigned(b.dataset.sign==='true')));
