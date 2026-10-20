@@ -1,31 +1,23 @@
-const CACHE='card-drop-tracker-v3-fourstar-tracking';
-const ASSETS=['./','./index.html','./manifest.webmanifest'];
-
-self.addEventListener('install',e=>{
+// Service worker v5: keep static asset support without serving stale app HTML.
+const CACHE='card-drop-tracker-v5-pink-sync';
+const ASSETS=['./manifest.webmanifest','./app-icon.svg'];
+self.addEventListener('install',event=>{
   self.skipWaiting();
-  e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)));
+  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).catch(()=>{}));
 });
-
-self.addEventListener('activate',e=>{
-  e.waitUntil(
-    caches.keys()
-      .then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))
-      .then(()=>self.clients.claim())
-  );
+self.addEventListener('activate',event=>{
+  event.waitUntil(Promise.all([
+    caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))),
+    self.clients.claim()
+  ]));
 });
-
-self.addEventListener('fetch',e=>{
-  if(e.request.mode==='navigate'){
-    e.respondWith(
-      fetch(e.request)
-        .then(response=>{
-          const copy=response.clone();
-          caches.open(CACHE).then(c=>c.put(e.request,copy));
-          return response;
-        })
-        .catch(()=>caches.match(e.request).then(r=>r||caches.match('./')))
-    );
+self.addEventListener('fetch',event=>{
+  const request=event.request;
+  if(request.mode==='navigate'){
+    // Never fall back to outdated index.html: stale code can break cloud sync.
+    event.respondWith(fetch(request,{cache:'no-store'}));
     return;
   }
-  e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)));
+  if(request.method!=='GET'||new URL(request.url).origin!==self.location.origin)return;
+  event.respondWith(caches.match(request).then(hit=>hit||fetch(request)));
 });
