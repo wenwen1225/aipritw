@@ -3,25 +3,25 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#7c5cff" />
+  <meta name="theme-color" content="#fff1f5" />
   <title>掉卡順序紀錄器</title>
   <link rel="icon" type="image/svg+xml" href="app-icon.svg">
   <link rel="apple-touch-icon" href="app-icon.svg">
   <link rel="manifest" href="manifest.webmanifest" />
   <style>
     :root{
-      --bg:#f6f4ff;
+      --bg:#fff5f8;
       --card:#ffffff;
-      --text:#2f2a3b;
-      --muted:#7d748d;
-      --line:#e8e2f4;
-      --purple:#7c5cff;
-      --purple-2:#9c84ff;
-      --pink:#ff7eb6;
+      --text:#4b3542;
+      --muted:#927b89;
+      --line:#f5dfe8;
+      --purple:#d46d98;
+      --purple-2:#ef9fba;
+      --pink:#f38aab;
       --gold:#e5a500;
       --blue:#4b86d9;
       --danger:#dc4860;
-      --shadow:0 10px 30px rgba(72,49,118,.10);
+      --shadow:0 10px 30px rgba(145,68,103,.10);
       --radius:20px;
     }
     *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -37,11 +37,11 @@
     .panel-title{font-size:13px;color:var(--muted);font-weight:700;margin-bottom:10px}
     .lane-switch{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .lane-btn{border:2px solid var(--line);background:#fff;border-radius:18px;padding:15px 10px;font-size:17px;font-weight:900;color:var(--muted)}
-    .lane-btn.active{border-color:var(--purple);background:linear-gradient(135deg,#eee8ff,#f9f6ff);color:var(--purple);box-shadow:inset 0 0 0 1px rgba(124,92,255,.05)}
-    .lane-btn.right.active{border-color:var(--pink);background:linear-gradient(135deg,#fff0f7,#fff9fc);color:#e75b98}
+    .lane-btn.active{border-color:var(--purple);background:linear-gradient(135deg,#fde5ee,#fff3f7);color:var(--purple);box-shadow:inset 0 0 0 1px rgba(212,109,152,.07)}
+    .lane-btn.right.active{border-color:var(--pink);background:linear-gradient(135deg,#ffe9ee,#fff4f6);color:#c74e7b}
     .sign-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
     .sign-btn{border:1.5px solid var(--line);background:#fff;border-radius:14px;padding:12px 8px;font-weight:900;color:var(--muted)}
-    .sign-btn.active{border-color:var(--purple);background:#f1edff;color:var(--purple)}
+    .sign-btn.active{border-color:var(--purple);background:#fde9f0;color:var(--purple)}
     .sign-btn.sign.active{border-color:#ff9dc9;background:#fff1f8;color:#cf4f88}
     .tip{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5}
     .cards-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
@@ -49,17 +49,17 @@
     .card-btn:active{transform:scale(.97)}
     .card-btn .badge{position:absolute;right:4px;top:3px;font-size:10px;line-height:1}
     .card-btn.four-star{border-color:#f1c95d;background:#fffaf0}
-    .card-btn.three-star{border-color:#b9a7ff;background:#faf8ff}
+    .card-btn.three-star{border-color:#edabc4;background:#fff5f8}
     .card-btn.two-star{border-color:#9fc5ef;background:#f7fbff}
     .recent{display:flex;flex-wrap:wrap;gap:7px;min-height:34px}
-    .chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:7px 9px;background:#f6f3fb;font-size:12px;font-weight:800;border:1px solid var(--line)}
-    .chip.left{color:var(--purple)} .chip.right{color:#df5a95}
+    .chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:7px 9px;background:#fff0f5;font-size:12px;font-weight:800;border:1px solid var(--line)}
+    .chip.left{color:var(--purple)} .chip.right{color:#d35a86}
     .chip.four-hit{background:#fff5cf;border-color:#efc34d;color:#9b6a00;box-shadow:0 0 0 2px rgba(239,195,77,.12) inset}
     .empty{color:var(--muted);font-size:13px}
     .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
     .four-track-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .four-track-card{border:1.5px solid var(--line);border-radius:16px;padding:12px;background:#fff}
-    .four-track-card.left{border-color:#cfc1ff;background:#fbf9ff}.four-track-card.right{border-color:#ffc5df;background:#fff9fc}
+    .four-track-card.left{border-color:#efbfd1;background:#fff7fa}.four-track-card.right{border-color:#ffc5df;background:#fff9fc}
     .four-track-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:7px;font-size:14px;font-weight:900}
     .four-track-now{font-size:22px;font-weight:950;line-height:1.15}
     .four-track-now span{font-size:12px;color:var(--muted);font-weight:700}
@@ -72,7 +72,7 @@
     .four-track-history-empty{font-size:11px;color:var(--muted)}
     .four-event-list{display:grid;gap:7px;margin-top:10px}
     .four-event{border:1px solid #f1d27a;background:#fffaf0;border-radius:13px;padding:9px 10px;font-size:12px;line-height:1.45}
-    .stat{background:#faf9ff;border:1px solid var(--line);border-radius:14px;padding:10px;text-align:center}
+    .stat{background:#fff6f9;border:1px solid var(--line);border-radius:14px;padding:10px;text-align:center}
     .stat b{display:block;font-size:20px}.stat span{font-size:11px;color:var(--muted)}
     .history-list{display:grid;gap:8px}
     .history-item{border:1px solid var(--line);border-radius:14px;padding:10px;background:#fff}
@@ -80,11 +80,11 @@
     .history-head b{font-size:14px}.history-head span{font-size:11px;color:var(--muted)}
     .history-summary{margin-top:6px;font-size:12px;color:var(--muted);line-height:1.5}
     .text-btn{border:0;background:transparent;color:var(--purple);font-weight:800;padding:5px}
-    .footer-bar{position:fixed;left:0;right:0;bottom:0;background:rgba(246,244,255,.93);backdrop-filter:blur(12px);border-top:1px solid var(--line);padding:10px 14px calc(10px + env(safe-area-inset-bottom));z-index:20}
+    .footer-bar{position:fixed;left:0;right:0;bottom:0;background:rgba(255,245,248,.95);backdrop-filter:blur(12px);border-top:1px solid var(--line);padding:10px 14px calc(10px + env(safe-area-inset-bottom));z-index:20}
     .footer-inner{max-width:720px;margin:0 auto;display:grid;grid-template-columns:1fr 1.4fr;gap:10px}
     .undo,.finish{border:0;border-radius:16px;padding:14px;font-weight:900}
     .undo{background:#fff;color:var(--text);border:1px solid var(--line)}
-    .finish{background:linear-gradient(135deg,var(--purple),var(--purple-2));color:#fff;box-shadow:0 8px 20px rgba(124,92,255,.25)}
+    .finish{background:linear-gradient(135deg,var(--purple),var(--purple-2));color:#fff;box-shadow:0 8px 20px rgba(212,109,152,.24)}
     .undo:disabled{opacity:.45}
     .overlay{position:fixed;inset:0;background:rgba(30,20,45,.38);display:none;align-items:flex-end;justify-content:center;z-index:50}
     .overlay.show{display:flex}
@@ -92,13 +92,13 @@
     .sheet h2{margin:0 0 4px;font-size:21px}.sheet p{margin:0 0 14px;color:var(--muted);font-size:13px}
     .sheet-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
     .sheet-actions button{flex:1;min-width:120px;border:0;border-radius:14px;padding:12px;font-weight:900}
-    .primary{background:var(--purple);color:#fff}.secondary{background:#f4f1f8;color:var(--text)}.danger{background:#fff0f2;color:var(--danger)}
+    .primary{background:var(--purple);color:#fff}.secondary{background:#fff0f5;color:var(--text)}.danger{background:#fff0f2;color:var(--danger)}
     .log{display:grid;gap:7px;margin-top:10px}
     .log-row{display:grid;grid-template-columns:42px 46px 1fr 52px;align-items:center;gap:6px;border-bottom:1px dashed var(--line);padding:7px 2px;font-size:12px}
     .log-row:last-child{border-bottom:0}
     .log-row.four-hit{background:#fffaf0;border:1px solid #f2d477;border-radius:12px;padding:9px 8px;margin:2px 0}
     .four-note{grid-column:1/-1;background:#fff0b8;color:#8a5b00;border-radius:9px;padding:6px 8px;font-size:11px;font-weight:900;margin-top:2px}
-    .pill{border-radius:999px;padding:4px 7px;text-align:center;font-weight:800;background:#f5f2fa}.pill.l{color:var(--purple)}.pill.r{color:#df5a95}
+    .pill{border-radius:999px;padding:4px 7px;text-align:center;font-weight:800;background:#fff0f5}.pill.l{color:var(--purple)}.pill.r{color:#d35a86}
     .mini-note{font-size:11px;color:var(--muted);margin-top:8px}
     .toast{position:fixed;left:50%;bottom:105px;transform:translateX(-50%) translateY(12px);background:#2f2a3b;color:#fff;border-radius:999px;padding:10px 14px;font-size:12px;font-weight:800;opacity:0;pointer-events:none;transition:.18s;z-index:80;white-space:nowrap}
     .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -339,7 +339,7 @@
     try{
       cloudStatus('讀取雲端中…');
       const before=await readCloud();
-      if(before.schemaVersion!==4)throw new Error('請先將 GAS 後端更新至 v4，原有本機紀錄暫保留');
+      if(Number(before.schemaVersion)!==4)throw new Error('後端回傳版本：'+(before.schemaVersion??'未提供')+'，需要 v4。請確認已更新原 /exec 部署網址；本機紀錄保留');
       const deleted=new Set([...before.deleted,...deletedIds]);
       const remoteIds=new Set(before.sessions.map(x=>x.id));
       for(const id of deletedIds){if(!before.deleted.includes(id))await writeCloud({action:'delete',id});}
@@ -585,7 +585,7 @@
     const intervalText = lane => tracking[lane].events.length
       ? tracking[lane].events.map((e,i)=>`第${i+1}次：${e.normalBefore}張普卡→✨${e.card}${e.signed?'✍️':''}`).join('｜')
       : '尚無四星';
-    return `<b style="color:var(--purple)">左道：</b>${left}<br><span style="color:var(--muted)">四星間隔：${intervalText('left')}</span><br><br><b style="color:#df5a95">右道：</b>${right}<br><span style="color:var(--muted)">四星間隔：${intervalText('right')}</span>`;
+    return `<b style="color:var(--purple)">左道：</b>${left}<br><span style="color:var(--muted)">四星間隔：${intervalText('left')}</span><br><br><b style="color:#d35a86">右道：</b>${right}<br><span style="color:var(--muted)">四星間隔：${intervalText('right')}</span>`;
   }
 
   function makeSession(){
@@ -668,7 +668,7 @@
     try {
       cloudStatus('確認永久刪除後端版本中…');
       const remote=await readCloud();
-      if(remote.schemaVersion!==4)throw new Error('請先部署 GAS v4，未刪除資料');
+      if(Number(remote.schemaVersion)!==4)throw new Error('後端目前不是 v4，未刪除資料');
       // Retain tombstone locally until the backend confirms the deletion.
       deletedIds=[...new Set([...deletedIds,id])];save(STORE_DELETED,deletedIds);
       history=history.filter(x=>x.id!==id);save(STORE_HISTORY,history);
@@ -682,12 +682,18 @@
   [$('#resultOverlay'),$('#historyOverlay')].forEach(ov=>ov.addEventListener('click',e=>{if(e.target===ov)ov.classList.remove('show')}));
 
   renderCards(); renderCurrent(); renderHistory(); saveDraft();
-  if(cloudReady()){cloudStatus('已設定，正在同步…');syncCloud();}
-  if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  if(cloudReady()){cloudStatus('連線 Google Sheets 中…');syncCloud();}
+  let lastReturnSync=Date.now();
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState!=='visible'||!cloudReady()||cloudBusy)return;
+    if(Date.now()-lastReturnSync<15000)return;
+    lastReturnSync=Date.now();syncCloud();
+  });
+  if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{});
 })();
 </script>
 
 <!-- Wen's Space navigation: isolated from app logic -->
-<a id="wensSpaceHomeLink" href="https://wens-space.vercel.app/" aria-label="返回 Wen's Space 首頁" style="position:fixed;right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));z-index:9999;display:inline-flex;align-items:center;gap:7px;padding:11px 15px;border-radius:999px;background:#7154a1;color:#fff;text-decoration:none;font:600 13px/1.2 -apple-system,BlinkMacSystemFont,'Noto Sans TC',sans-serif;box-shadow:0 5px 20px #3b235a40;border:1px solid #ffffff55">⌂ 返回 Wen's Space</a>
+<a id="wensSpaceHomeLink" href="https://wens-space.vercel.app/" aria-label="返回 Wen's Space 首頁" style="position:fixed;right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));z-index:9999;display:inline-flex;align-items:center;gap:7px;padding:11px 15px;border-radius:999px;background:#ce6c96;color:#fff;text-decoration:none;font:600 13px/1.2 -apple-system,BlinkMacSystemFont,'Noto Sans TC',sans-serif;box-shadow:0 5px 20px #9a4d6b40;border:1px solid #ffffff55">⌂ 返回 Wen's Space</a>
 </body>
 </html>
