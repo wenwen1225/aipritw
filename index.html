@@ -115,6 +115,24 @@
     </header>
 
     <section class="panel">
+      <div class="panel-title">0｜本局卡片分類</div>
+      <div class="classification-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+        <label style="font-size:13px;font-weight:800;color:var(--muted)">季數
+          <select id="seasonSelect" style="width:100%;margin-top:6px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text)"><option value="">請選季數</option></select>
+        </label>
+        <label style="font-size:13px;font-weight:800;color:var(--muted)">彈數
+          <select id="waveSelect" style="width:100%;margin-top:6px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text)"><option value="">請選彈數</option></select>
+        </label>
+        <label style="grid-column:1/-1;font-size:13px;font-weight:800;color:var(--muted)">卡片版本
+          <select id="editionSelect" style="width:100%;margin-top:6px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text)">
+            <option value="">請選版本</option><option value="韓版">韓版</option><option value="日版">日版</option><option value="台版">台版</option>
+          </select>
+        </label>
+      </div>
+      <div class="tip">每季最多 6 彈；下一季從第 1 彈重新選擇。分類套用到整局，不會修改舊歷史紀錄。</div>
+    </section>
+
+    <section class="panel">
       <div class="panel-title">1｜目前調整哪一道？</div>
       <div class="lane-switch">
         <button class="lane-btn active" id="leftLane" data-lane="left">⬅️ 左道</button>
@@ -242,7 +260,9 @@
   const STORE_DRAFT = 'cardDropTracker.draft.v1';
   const STORE_CLOUD = 'cardDropTracker.cloudConfig.v1';
   const STORE_DELETED = 'cardDropTracker.deletedIds.v1';
+  const STORE_CATEGORY = 'cardDropTracker.category.v1';
 
+  let category=load(STORE_CATEGORY,{season:'',wave:'',edition:''});
   let lane = 'left';
   let signed = false;
   const draft=load(STORE_DRAFT,null);
@@ -315,6 +335,7 @@
     try{
       cloudStatus('讀取雲端中…');
       const before=await readCloud();
+      if(before.schemaVersion!==3)throw new Error('請先將 GAS 後端更新至 v3，分類紀錄暫保留本機');
       const deleted=new Set([...before.deleted,...deletedIds]);
       const remoteIds=new Set(before.sessions.map(x=>x.id));
       for(const id of deletedIds){if(!before.deleted.includes(id))await writeCloud({action:'delete',id});}
@@ -344,6 +365,7 @@
           +'。資料仍保留本機。請到 Apps Script → 執行項目，查看 doPost 是否有執行或報錯；確認後可再按「同步雲端」。';
         throw new Error(message);
       }
+      const tombstones=new Set(after.deleted);
       const merged=new Map();
       [...after.sessions,...history].forEach(x=>{if(!tombstones.has(x.id)&&!deleted.has(x.id))merged.set(x.id,x);});
       history=[...merged.values()].sort((a,b)=>b.startedAt.localeCompare(a.startedAt));
@@ -535,29 +557,31 @@
   }
 
   function makeSession(){
-    return {id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), startedAt:sessionStartedAt.toISOString(), endedAt:new Date().toISOString(), records:(typeof structuredClone === 'function') ? structuredClone(records) : JSON.parse(JSON.stringify(records))};
+    return {season:Number(category.season),wave:Number(category.wave),edition:category.edition,id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), startedAt:sessionStartedAt.toISOString(), endedAt:new Date().toISOString(), records:(typeof structuredClone === 'function') ? structuredClone(records) : JSON.parse(JSON.stringify(records))};
   }
 
   function saveAndNew(){
+    if(!category.season||!category.wave||!category.edition){toast('請先選擇季數、彈數和版本');$('#resultOverlay').classList.remove('show');return;}
     const session=makeSession(); history.unshift(session); save(STORE_HISTORY,history);
     records=[]; sessionStartedAt=new Date(); saveDraft(); setLane('left'); setSigned(false);
     $('#resultOverlay').classList.remove('show'); renderCurrent(); renderHistory(); toast('本局已存於本機'); if(cloudReady())syncCloud();
   }
 
+  function categoryLabel(s){return s.season&&s.wave&&s.edition?`第${s.season}季・第${s.wave}彈・${s.edition}`:'未分類';}
   function renderHistory(){
     const box=$('#historyList'); box.innerHTML='';
     if(!history.length){ box.innerHTML='<span class="empty">完成一局後，紀錄會保存在這裡。</span>'; return; }
     history.slice(0,8).forEach(s=>{
       const rare=s.records.filter(isSignedRecord).length;
       const item=document.createElement('div'); item.className='history-item';
-      item.innerHTML=`<div class="history-head"><b>${nowText(new Date(s.startedAt))}・${s.records.length} 張</b><button class="text-btn">查看</button></div><div class="history-summary">左 ${s.records.filter(x=>x.lane==='left').length}｜右 ${s.records.filter(x=>x.lane==='right').length}｜簽卡 ${rare}</div>`;
+      item.innerHTML=`<div class="history-head"><b>${nowText(new Date(s.startedAt))}・${s.records.length} 張</b><button class="text-btn">查看</button></div><div class="history-summary">${categoryLabel(s)}｜左 ${s.records.filter(x=>x.lane==='left').length}｜右 ${s.records.filter(x=>x.lane==='right').length}｜簽卡 ${rare}</div>`;
       item.querySelector('button').addEventListener('click',()=>openHistory(s.id)); box.appendChild(item);
     });
   }
 
   function openHistory(id){
     const s=history.find(x=>x.id===id); if(!s) return; selectedHistoryId=id;
-    $('#historyMeta').textContent=`${fullText(new Date(s.startedAt))} ～ ${fullText(new Date(s.endedAt))}・共 ${s.records.length} 張`;
+    $('#historyMeta').textContent=`${fullText(new Date(s.startedAt))} ～ ${fullText(new Date(s.endedAt))}・共 ${s.records.length} 張｜${categoryLabel(s)}`;
     fillFourEvents($('#historyFourEvents'),s.records); fillLog($('#historyLog'),s.records); $('#historyLaneSummary').innerHTML=laneSummaryHtml(s.records); $('#historyOverlay').classList.add('show');
   }
 
@@ -577,6 +601,15 @@
     const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`掉卡紀錄_${Date.now()}.csv`; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
 
+  function initCategory(){
+    for(let n=1;n<=10;n++)$('#seasonSelect').add(new Option('第 '+n+' 季',String(n)));
+    for(let n=1;n<=6;n++)$('#waveSelect').add(new Option('第 '+n+' 彈',String(n)));
+    for(const [id,key] of [['#seasonSelect','season'],['#waveSelect','wave'],['#editionSelect','edition']]){
+      $(id).value=String(category[key]||'');
+      $(id).addEventListener('change',()=>{category[key]=$(id).value;save(STORE_CATEGORY,category);});
+    }
+  }
+  initCategory();
   $('#leftLane').addEventListener('click',()=>setLane('left'));
   $('#rightLane').addEventListener('click',()=>setLane('right'));
   $$('.sign-btn').forEach(b=>b.addEventListener('click',()=>setSigned(b.dataset.sign==='true')));
