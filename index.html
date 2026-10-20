@@ -190,7 +190,7 @@
     </section>
 
     <section class="panel">
-      <div class="panel-title">歷史紀錄</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin:9px 0;align-items:center"><button class="text-btn" id="cloudSetupBtn">⚙ GAS 連線設定</button><button class="text-btn" id="cloudSyncBtn">↻ 同步雲端</button><button class="text-btn" id="versionCheckBtn">ⓘ 檢查版本</button><span id="cloudStatus" role="status" aria-live="polite" style="font-size:11px;color:var(--muted);overflow-wrap:anywhere;line-height:1.6">本機儲存模式</span></div>
+      <div class="panel-title">歷史紀錄</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin:9px 0;align-items:center"><button class="text-btn" id="cloudSetupBtn">⚙ GAS 連線設定</button><button class="text-btn" id="gasTestBtn">↗ 測試 GAS 網址</button><button class="text-btn" id="cloudSyncBtn">↻ 同步雲端</button><button class="text-btn" id="versionCheckBtn">ⓘ 檢查版本</button><span id="cloudStatus" role="status" aria-live="polite" style="font-size:11px;color:var(--muted);overflow-wrap:anywhere;line-height:1.6">本機儲存模式</span></div>
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:8px 0 12px">
         <select id="historySeason" aria-label="篩選季數" style="min-width:0;width:100%;padding:9px 4px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--text)"><option value="">全部季數</option></select>
         <select id="historyWave" aria-label="篩選彈數" style="min-width:0;width:100%;padding:9px 4px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--text)"><option value="">全部彈數</option></select>
@@ -260,7 +260,7 @@
   const rarityBadge = r => r === 'four' ? '4★' : r === 'three' ? '3★' : '2★';
   const rarityEmoji = r => r === 'four' ? '⭐' : '';
   const laneLabel = l => l === 'left' ? '左' : '右';
-  const FRONTEND_VERSION = '1.6.1';
+  const FRONTEND_VERSION = '1.6.2';
   const EXPECTED_BACKEND_SCHEMA = 4;
   const STORE_HISTORY = 'cardDropTracker.history.v1';
   const STORE_DRAFT = 'cardDropTracker.draft.v1';
@@ -716,27 +716,34 @@
     }finally{btn.disabled=false;}
   }
   $('#cloudSetupBtn').addEventListener('click',async()=>{
-    if(cloudBusy){toast('正在同步，請稍後再設定');return;}
-    const answer=prompt('貼上 GAS 網頁應用程式的 /exec 網址（每台裝置設定一次，不需要同步金鑰）',cloudConfig.url||DEFAULT_CLOUD_URL);
+    if(cloudBusy){toast('正在同步，請稍後設定');return;}
+    const answer=prompt('貼上 GAS 網頁應用程式的 /exec 網址（不需要金鑰，手機會記住）',cloudConfig.url||DEFAULT_CLOUD_URL);
     if(answer===null)return;
-    const next=answer.trim();
+    const next=answer.trim().replace(/[?#].*$/,'').replace(/\/$/,'');
     if(!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(next)){
-      cloudStatus('⚠ GAS 網址格式不正確；原設定保留');return;
+      cloudStatus('⚠ GAS 網址格式錯誤，請貼上以 /exec 結尾的網址；原設定保留');return;
     }
-    const previous={...cloudConfig};
+    // Save valid URL *before* contacting GAS. Mobile Safari may block the first
+    // JSONP attempt; do not silently revert to an obsolete deployment URL.
     cloudConfig={url:next};
+    save(STORE_CLOUD,{url:next});
     $('#cloudSetupBtn').disabled=true;
-    cloudStatus('正在測試新的 GAS 連線…');
+    cloudStatus('✓ GAS 網址已保存在此裝置，正在檢查連線…');
     try{
       const remote=await readCloud();
-      if(Number(remote.schemaVersion)!==EXPECTED_BACKEND_SCHEMA)throw new Error('後端資料介面需要 v'+EXPECTED_BACKEND_SCHEMA+'，目前為 '+(remote.schemaVersion??'未提供'));
-      save(STORE_CLOUD,{url:next});
-      cloudStatus('✓ GAS 網址已儲存，開始同步');
+      const version=Number(remote.schemaVersion);
+      if(version!==EXPECTED_BACKEND_SCHEMA)throw new Error('GAS 有回應，但版本為 '+(remote.schemaVersion??'未提供')+'，需要 v'+EXPECTED_BACKEND_SCHEMA);
+      cloudStatus('✓ GAS v'+version+' 已連接，正在同步資料…');
       await syncCloud();
     }catch(error){
-      cloudConfig=previous;
-      cloudStatus('⚠ '+(error.message||'連線失敗')+'；已保留原 GAS 設定及本機紀錄');
+      cloudStatus('⚠ GAS 網址已儲存，但連線測試失敗：'+(error.message||'未知錯誤')+'。可按「測試 GAS 網址」檢查；本機紀錄保留');
     }finally{$('#cloudSetupBtn').disabled=false;}
+  });
+  $('#gasTestBtn').addEventListener('click',()=>{
+    if(!cloudReady()){toast('請先設定 GAS 網址');return;}
+    const testUrl=cloudConfig.url+'?action=list&callback=cloudCallback_manualtest';
+    window.open(testUrl,'_blank','noopener,noreferrer');
+    cloudStatus('已開啟 GAS 測試網址。若看到登入畫面／權限錯誤，請檢查 GAS 部署存取權；若看到 cloudCallback_manualtest({...})，代表後端可公開讀取。');
   });
   $('#versionCheckBtn').addEventListener('click',checkVersions);
   $('#cloudSyncBtn').addEventListener('click',syncCloud);
