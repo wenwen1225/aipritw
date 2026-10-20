@@ -367,7 +367,20 @@
       }
       const tombstones=new Set(after.deleted);
       const merged=new Map();
-      [...after.sessions,...history].forEach(x=>{if(!tombstones.has(x.id)&&!deleted.has(x.id))merged.set(x.id,x);});
+      // Keep server-side classifications when the same session exists locally.
+      // An older browser can have the same ID with no season/wave/edition.
+      history.forEach(x=>{if(!tombstones.has(x.id)&&!deleted.has(x.id))merged.set(x.id,x);});
+      after.sessions.forEach(remote=>{
+        if(tombstones.has(remote.id)||deleted.has(remote.id))return;
+        const local=merged.get(remote.id);
+        merged.set(remote.id, local ? {
+          ...local,
+          ...remote,
+          season: remote.season || local.season || null,
+          wave: remote.wave || local.wave || null,
+          edition: remote.edition || local.edition || ''
+        } : remote);
+      });
       history=[...merged.values()].sort((a,b)=>b.startedAt.localeCompare(a.startedAt));
       save(STORE_HISTORY,history);
       deletedIds=[];save(STORE_DELETED,deletedIds);
