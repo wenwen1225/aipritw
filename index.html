@@ -210,8 +210,8 @@
     </section>
 
     <section class="panel">
-      <div class="panel-title">歷史紀錄</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin:9px 0;align-items:center"><button class="text-btn" id="cloudSetupBtn">⚙ GAS 連線設定</button><button class="text-btn" id="cloudSyncBtn">↻ 同步雲端</button><button class="text-btn" id="versionCheckBtn">ⓘ 檢查版本</button><span id="cloudStatus" role="status" aria-live="polite" style="font-size:11px;color:var(--muted);overflow-wrap:anywhere;line-height:1.6">本機儲存模式</span></div>
-      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:8px 0 12px">
+      <div class="panel-title">歷史紀錄</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin:9px 0;align-items:center"><button class="text-btn" id="cloudSetupBtn">⚙ GAS 連線設定</button><button class="text-btn" id="cloudSyncBtn">↻ 同步雲端</button><button class="text-btn" id="saveDraftCloudBtn">☁ 備份本局草稿</button><button class="text-btn" id="loadDraftCloudBtn">↓ 讀取雲端草稿</button><button class="text-btn" id="versionCheckBtn">ⓘ 檢查版本</button><span id="cloudStatus" role="status" aria-live="polite" style="font-size:11px;color:var(--muted);overflow-wrap:anywhere;line-height:1.6">本機儲存模式</span></div>
+      <div id="draftCloudStatus" role="status" aria-live="polite" style="font-size:12px;color:var(--muted);line-height:1.6;margin:-2px 0 7px">草稿已保留在此裝置，連線後可備份到雲端。</div><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:8px 0 12px">
         <select id="historySeason" aria-label="篩選季數" style="min-width:0;width:100%;padding:9px 4px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--text)"><option value="">全部季數</option></select>
         <select id="historyWave" aria-label="篩選彈數" style="min-width:0;width:100%;padding:9px 4px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--text)"><option value="">全部彈數</option></select>
         <select id="historyEdition" aria-label="篩選版本" style="min-width:0;width:100%;padding:9px 4px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--text)"><option value="">全部版本</option><option value="台版">台版</option><option value="韓版">韓版</option><option value="日版">日版</option></select>
@@ -312,7 +312,21 @@
 
   function load(key, fallback){ try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
   function save(key, value){ localStorage.setItem(key, JSON.stringify(value)); }
-  function saveDraft(){save(STORE_DRAFT,{startedAt:sessionStartedAt.toISOString(),records,playDate,playLocation});}
+  let draftRevision=String(draft?.cloudRevision||'');
+  let draftReady=false,draftConflict=false,draftSaving=false,draftTimer=null,draftPendingClear=null;
+  const draftPayload=()=>({
+    startedAt:sessionStartedAt.toISOString(),records:records.map(x=>({...x})),
+    playDate,playLocation,season:category.season,wave:category.wave,edition:category.edition
+  });
+  const draftStatus=text=>{$('#draftCloudStatus').textContent=text;};
+  function saveDraft(){
+    save(STORE_DRAFT,{...draftPayload(),cloudRevision:draftRevision});
+    if(draftReady&&!draftConflict&&records.length){
+      clearTimeout(draftTimer);
+      draftStatus('本機草稿已儲存，稍後備份到雲端…');
+      draftTimer=setTimeout(()=>uploadDraft(false),2500);
+    }
+  }
   function cloudStatus(msg){const el=$('#cloudStatus');el.textContent=msg;el.title=msg;el.style.color=msg.startsWith('✓')?'#137b55':msg.startsWith('⚠')?'#bc395e':'var(--muted)';}
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   function cloudReady(){return cloudConfig&&/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(cloudConfig.url);}
@@ -383,6 +397,106 @@
       form.submit();
     });
   }
+  async function uploadDraft(manual=false){
+    if(draftSaving||cloudBusy||!cloudReady()||!records.length)return;
+    clearTimeout(draftTimer);
+    draftSaving=true;$('#saveDraftCloudBtn').disabled=true;
+    try{
+      const before=await readCloud();
+      if(Number(before.schemaVersion)!==EXPECTED_BACKEND_SCHEMA)throw new Error('雲端草稿需要 GAS v'+EXPECTED_BACKEND_SCHEMA);
+      const remote=before.draft,revision=String(remote?.revision||'');
+      if(revision!==draftRevision){
+        draftConflict=true;
+        if(!manual)throw new Error('雲端草稿已有其他版本，請用「讀取雲端草稿」確認，未覆蓋');
+        if(!confirm('雲端已有另一份草稿。要用這台裝置的 '+records.length+' 張紀錄覆蓋雲端草稿嗎？\n此操作不會清除已完成的歷史紀錄。'))return;
+      }
+      const data=draftPayload(),expectedRevision=revision;
+      draftStatus('正在備份雲端草稿…');
+      await writeCloud({action:'saveDraft',draft:data,expectedRevision});
+      let confirmed=null;
+      for(let i=0;i<4;i++){
+        await sleep(1100+i*900);
+        const after=await readCloud();
+        if(after.draft?.revision!==expectedRevision&&
+          JSON.stringify(after.draft?.data)===JSON.stringify(data)){confirmed=after.draft;break;}
+      }
+      if(!confirmed)throw new Error('後端尚未確認草稿寫入，本機草稿仍保留');
+      draftRevision=confirmed.revision;draftReady=true;draftConflict=false;
+      save(STORE_DRAFT,{...draftPayload(),cloudRevision:draftRevision});
+      draftStatus('✓ 草稿已備份雲端（'+records.length+' 張）');
+    }catch(err){draftStatus('⚠ '+err.message);}
+    finally{draftSaving=false;$('#saveDraftCloudBtn').disabled=false;}
+  }
+  function applyRemoteDraft_(remote){
+    const d=remote.data;
+    if(!d||!Array.isArray(d.records)||!d.startedAt||isNaN(Date.parse(d.startedAt)))throw new Error('雲端草稿格式錯誤');
+    clearTimeout(draftTimer);
+    records=d.records.map(x=>({...x}));
+    sessionStartedAt=new Date(d.startedAt);
+    playDate=playDateValid(d.playDate)?d.playDate:localToday();
+    playLocation=String(d.playLocation||'');
+    if(d.season&&d.wave&&d.edition){
+      category={season:String(d.season),wave:String(d.wave),edition:String(d.edition)};
+      save(STORE_CATEGORY,category);
+      $('#seasonSelect').value=category.season;$('#waveSelect').value=category.wave;$('#editionSelect').value=category.edition;
+    }
+    $('#playDateInput').value=playDate;$('#playWeekday').textContent=playWeekday(playDate);
+    $('#playLocationInput').value=playLocation;
+    draftRevision=String(remote.revision);draftReady=true;draftConflict=false;
+    save(STORE_DRAFT,{...draftPayload(),cloudRevision:draftRevision});
+    renderCurrent();draftStatus('✓ 已載入雲端草稿（'+records.length+' 張）');
+  }
+  async function loadDraftFromCloud(){
+    if(cloudBusy||draftSaving){toast('請稍後再試');return;}
+    try{
+      draftStatus('正在檢查雲端草稿…');
+      const response=await readCloud();
+      if(Number(response.schemaVersion)!==EXPECTED_BACKEND_SCHEMA)throw new Error('需先部署 GAS v'+EXPECTED_BACKEND_SCHEMA);
+      const remote=response.draft;
+      if(!remote?.data?.records?.length){draftStatus('雲端目前沒有進行中的卡片草稿');return;}
+      if(history.some(x=>x.startedAt===remote.data.startedAt)){
+        draftStatus('雲端草稿屬於已完成的局數，未重新載入');return;
+      }
+      if(records.length&&!confirm('目前這台有 '+records.length+' 張未完成紀錄；確定要改為雲端的 '+remote.data.records.length+' 張嗎？\n目前的本機草稿將被取代。'))return;
+      applyRemoteDraft_(remote);
+    }catch(err){draftStatus('⚠ '+err.message);}
+  }
+  async function clearCompletedDraft_(){
+    if(!draftPendingClear||draftSaving)return;
+    const completedStart=draftPendingClear;
+    try{
+      const before=await readCloud();
+      const remote=before.draft;
+      if(!remote||remote.data?.startedAt!==completedStart){draftPendingClear=null;return;}
+      await writeCloud({action:'clearDraft',expectedRevision:remote.revision});
+      let cleared=false;
+      for(let i=0;i<4;i++){await sleep(1000+i*700);const a=await readCloud();if(!a.draft){cleared=true;break;}}
+      if(cleared){draftPendingClear=null;draftRevision='';draftReady=true;draftConflict=false;save(STORE_DRAFT,{...draftPayload(),cloudRevision:''});draftStatus('✓ 已完成本局，雲端草稿已清除');}
+      else draftStatus('⚠ 已完成局數，但舊草稿尚未確認清除，請稍後重新同步');
+    }catch(err){draftStatus('⚠ 已完成紀錄保留；草稿清除待確認：'+err.message);}
+  }
+  function reconcileCloudDraft_(remote){
+    if(!remote?.data?.records?.length){
+      draftReady=true;draftConflict=!!draftRevision;
+      if(!records.length){draftRevision='';draftConflict=false;}
+      else if(!draftConflict)saveDraft();
+      return;
+    }
+    if(history.some(x=>x.startedAt===remote.data.startedAt)){
+      draftPendingClear=remote.data.startedAt;
+      draftStatus('雲端仍有已完成局數的舊草稿，待清理');
+      draftReady=true;return;
+    }
+    if(!records.length){applyRemoteDraft_(remote);return;}
+    if(remote.data.startedAt===sessionStartedAt.toISOString()&&
+       JSON.stringify(remote.data.records)===JSON.stringify(records)){
+      draftRevision=remote.revision;draftReady=true;draftConflict=false;
+      save(STORE_DRAFT,{...draftPayload(),cloudRevision:draftRevision});
+      draftStatus('✓ 本機與雲端草稿一致（'+records.length+' 張）');return;
+    }
+    draftReady=true;draftConflict=true;
+    draftStatus('⚠ 雲端有不同的未完成草稿，請點「讀取雲端草稿」比較後選擇；本機未覆蓋');
+  }
   async function syncCloud(){
     if(cloudBusy)return;
     if(!cloudReady()){toast('請先設定雲端');return;}
@@ -440,6 +554,9 @@
       save(STORE_HISTORY,history);
       deletedIds=[];save(STORE_DELETED,deletedIds);
       renderHistory();cloudStatus('✓ 同步完成，共 '+history.length+' 局');toast('雲端同步完成');
+      if(!draftReady)reconcileCloudDraft_(after.draft);
+      else if(after.draft?.data&&history.some(x=>x.startedAt===after.draft.data.startedAt))draftPendingClear=after.draft.data.startedAt;
+      if(draftPendingClear)await clearCompletedDraft_();
     }catch(err){cloudStatus('⚠ '+err.message+'；本機紀錄保留');toast('雲端同步未完成');}
     finally{cloudBusy=false;$('#cloudSyncBtn').disabled=false;}
   }
@@ -666,7 +783,10 @@
     if(!category.season||!category.wave||!category.edition){toast('請先選擇季數、彈數和版本');$('#resultOverlay').classList.remove('show');return;}
     if(!playDateValid(playDate)){toast('請選擇正確遊玩日期');$('#resultOverlay').classList.remove('show');return;}
     if(!playLocation.trim()){toast('請先填寫遊玩地點');$('#resultOverlay').classList.remove('show');return;}
+    const completedStart=sessionStartedAt.toISOString();
     const session=makeSession(); history.unshift(session); save(STORE_HISTORY,history);
+    draftPendingClear=completedStart;
+    clearTimeout(draftTimer);draftReady=false;draftConflict=false;
     records=[]; sessionStartedAt=new Date(); playDate=localToday();$('#playDateInput').value=playDate;$('#playWeekday').textContent=playWeekday(playDate);saveDraft(); setLane('left'); setSigned(false);
     $('#resultOverlay').classList.remove('show'); renderCurrent(); renderHistory(); toast('本機已儲存，等待雲端確認');cloudStatus('本機已儲存・待同步'); if(cloudReady())syncCloud();
   }
@@ -924,6 +1044,8 @@
   });
   $('#versionCheckBtn').addEventListener('click',checkVersions);
   $('#cloudSyncBtn').addEventListener('click',syncCloud);
+  $('#saveDraftCloudBtn').addEventListener('click',()=>uploadDraft(true));
+  $('#loadDraftCloudBtn').addEventListener('click',loadDraftFromCloud);
   [$('#resultOverlay'),$('#historyOverlay')].forEach(ov=>ov.addEventListener('click',e=>{if(e.target===ov)ov.classList.remove('show')}));
 
   renderCards(); renderCurrent(); renderHistory(); saveDraft();
