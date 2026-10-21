@@ -113,6 +113,26 @@
     .location-field{font-size:13px;font-weight:800;color:var(--muted);min-width:0;display:block}
     .location-field select,.location-field input{font:inherit;font-weight:500;box-sizing:border-box;display:block;width:100%;min-width:0;max-width:100%;min-height:46px;margin-top:6px;padding:10px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text)}
     @media(max-width:420px){.location-grid{grid-template-columns:1fr}}
+    /* Compact mobile cloud actions; native details keeps secondary controls available. */
+    .cloud-quick-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px;margin:10px 0 7px;align-items:start}
+    .cloud-sync-primary,.cloud-manage-toggle{display:flex;justify-content:center;align-items:center;gap:5px;min-height:44px;width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;background:#fff6f9;color:var(--text);font-size:13px;font-weight:750;padding:10px 8px;text-align:center;white-space:nowrap}
+    .cloud-sync-primary{background:#fbe4ed;color:#9f426c}
+    .cloud-manage{min-width:0;position:relative}
+    .cloud-manage-toggle{cursor:pointer;list-style:none;user-select:none}
+    .cloud-manage-toggle::-webkit-details-marker{display:none}
+    .cloud-manage-arrow{display:inline-block;transition:transform .2s}
+    .cloud-manage[open] .cloud-manage-arrow{transform:rotate(180deg)}
+    .cloud-manage[open]{grid-column:2}
+    .cloud-manage-content{position:relative;z-index:1;box-sizing:border-box;margin-top:8px;padding:12px;background:#fff8fa;border:1px solid var(--line);border-radius:13px;width:min(310px,calc(200vw - 46px));max-width:calc(100vw - 40px);transform:translateX(calc(-50% + 50% / 2))}
+    .cloud-manage-title{font-size:12px;font-weight:800;color:var(--muted);margin-bottom:10px}
+    .cloud-manage-actions{display:grid;grid-template-columns:1fr;gap:8px}
+    .cloud-manage-actions .text-btn{width:100%;min-height:39px;text-align:left;padding:9px 10px;border-radius:9px;background:#fff;border:1px solid var(--line)}
+    .cloud-main-status{font-size:11px;color:var(--muted);overflow-wrap:anywhere;line-height:1.6;margin:5px 0 9px}
+    .cloud-draft-status{font-size:12px;color:var(--muted);line-height:1.6;margin-top:10px;overflow-wrap:anywhere}
+    .cloud-version-result{font-size:12px;line-height:1.7;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:10px;white-space:pre-line;overflow-wrap:anywhere}
+    .cloud-version-result[hidden]{display:none}
+    @media(max-width:480px){.cloud-manage-content{width:calc(200% + 9px);max-width:none;transform:translateX(calc(-50% - 4.5px))}}
+    @media(min-width:481px){.cloud-manage-content{width:300px;transform:translateX(-90px)}}
     @media (min-width:560px){.cards-grid{grid-template-columns:repeat(10,1fr)}.card-btn{min-height:50px}.app{padding-left:20px;padding-right:20px}}
   </style>
 </head>
@@ -210,12 +230,30 @@
     </section>
 
     <section class="panel">
-      <div class="panel-title">歷史紀錄</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin:9px 0;align-items:center"><button class="text-btn" id="cloudSetupBtn">⚙ GAS 連線設定</button><button class="text-btn" id="cloudSyncBtn">↻ 同步雲端</button><button class="text-btn" id="saveDraftCloudBtn">☁ 備份本局草稿</button><button class="text-btn" id="loadDraftCloudBtn">↓ 讀取雲端草稿</button><button class="text-btn" id="versionCheckBtn">ⓘ 檢查版本</button><span id="cloudStatus" role="status" aria-live="polite" style="font-size:11px;color:var(--muted);overflow-wrap:anywhere;line-height:1.6">本機儲存模式</span></div>
-      <div id="draftCloudStatus" role="status" aria-live="polite" style="font-size:12px;color:var(--muted);line-height:1.6;margin:-2px 0 7px">草稿已保留在此裝置，連線後可備份到雲端。</div><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:8px 0 12px">
+      <div class="panel-title">歷史紀錄</div>
+      <div class="cloud-quick-row">
+        <button class="text-btn cloud-sync-primary" id="cloudSyncBtn">↻ 同步雲端</button>
+        <details class="cloud-manage" id="cloudManage">
+          <summary class="cloud-manage-toggle">⚙ 雲端管理 <span aria-hidden="true" class="cloud-manage-arrow">⌄</span></summary>
+          <div class="cloud-manage-content">
+            <div class="cloud-manage-title">雲端設定與草稿</div>
+            <div class="cloud-manage-actions">
+              <button class="text-btn" id="saveDraftCloudBtn">☁ 備份本局草稿</button>
+              <button class="text-btn" id="loadDraftCloudBtn">↓ 讀取雲端草稿</button>
+              <button class="text-btn" id="versionCheckBtn">ⓘ 檢查版本</button>
+              <button class="text-btn" id="cloudSetupBtn">⚙ GAS 連線設定</button>
+            </div>
+            <div id="draftCloudStatus" role="status" aria-live="polite" class="cloud-draft-status">草稿已保留在此裝置，連線後可備份到雲端。</div>
+            <div id="versionCheckResult" role="status" aria-live="polite" hidden class="cloud-version-result"></div>
+          </div>
+        </details>
+      </div>
+      <div id="cloudStatus" role="status" aria-live="polite" class="cloud-main-status">本機儲存模式</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:8px 0 12px">
         <select id="historySeason" aria-label="篩選季數" style="min-width:0;width:100%;padding:9px 4px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--text)"><option value="">全部季數</option></select>
         <select id="historyWave" aria-label="篩選彈數" style="min-width:0;width:100%;padding:9px 4px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--text)"><option value="">全部彈數</option></select>
         <select id="historyEdition" aria-label="篩選版本" style="min-width:0;width:100%;padding:9px 4px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--text)"><option value="">全部版本</option><option value="台版">台版</option><option value="韓版">韓版</option><option value="日版">日版</option></select>
-      </div><div id="versionCheckResult" role="status" aria-live="polite" hidden style="font-size:12px;line-height:1.7;background:#fff6f9;border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px;white-space:pre-line"></div><div class="history-list" id="historyList"></div>
+      </div><div class="history-list" id="historyList"></div>
     </section>
   </main>
 
@@ -280,7 +318,7 @@
   const rarityBadge = r => r === 'four' ? '4★' : r === 'three' ? '3★' : '2★';
   const rarityEmoji = r => r === 'four' ? '⭐' : '';
   const laneLabel = l => l === 'left' ? '左' : '右';
-  const FRONTEND_VERSION = '2.1.0';
+  const FRONTEND_VERSION = '2.1.1';
   const EXPECTED_BACKEND_SCHEMA = 8;
   const STORE_HISTORY = 'cardDropTracker.history.v1';
   const STORE_DRAFT = 'cardDropTracker.draft.v1';
