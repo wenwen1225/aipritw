@@ -102,6 +102,13 @@
     .mini-note{font-size:11px;color:var(--muted);margin-top:8px}
     .toast{position:fixed;left:50%;bottom:105px;transform:translateX(-50%) translateY(12px);background:#2f2a3b;color:#fff;border-radius:999px;padding:10px 14px;font-size:12px;font-weight:800;opacity:0;pointer-events:none;transition:.18s;z-index:80;white-space:nowrap}
     .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    /* The native iOS date control needs its own row: never overlay weekday text. */
+    .play-date-section{display:grid;grid-template-columns:minmax(0,1fr);gap:7px;margin-bottom:14px;width:100%;min-width:0}
+    .play-date-label{display:block;font-size:13px;font-weight:800;color:var(--muted)}
+    #playDateInput{display:block;box-sizing:border-box;min-width:0;width:100%;max-width:100%;min-height:48px;margin:0;padding:11px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text);font:inherit;text-align:center;-webkit-appearance:none;appearance:none}
+    .play-date-weekday{font-size:13px;font-weight:800;color:var(--purple);text-align:right;padding:0 3px;line-height:1.5}
+    .classification-grid>*{min-width:0}
+    .classification-grid select{box-sizing:border-box;min-width:0;max-width:100%}
     @media (min-width:560px){.cards-grid{grid-template-columns:repeat(10,1fr)}.card-btn{min-height:50px}.app{padding-left:20px;padding-right:20px}}
   </style>
 </head>
@@ -115,7 +122,11 @@
     </header>
 
     <section class="panel">
-      <div class="panel-title">0｜遊玩日期與卡片分類</div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px"><label style="font-size:13px;font-weight:800;color:var(--muted);flex:1;min-width:180px">實際遊玩日期（年／月／日）<input id="playDateInput" type="date" required style="display:block;width:100%;margin-top:6px;padding:11px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text);font:inherit"></label><span id="playWeekday" style="font-size:13px;font-weight:800;color:var(--purple)">星期－</span></div>
+      <div class="panel-title">0｜遊玩日期與卡片分類</div><div class="play-date-section">
+        <label for="playDateInput" class="play-date-label">實際遊玩日期（年／月／日）</label>
+        <input id="playDateInput" type="date" required aria-describedby="playWeekday">
+        <div class="play-date-weekday" id="playWeekday" aria-live="polite">星期－</div>
+      </div>
       <div class="classification-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
         <label style="font-size:13px;font-weight:800;color:var(--muted)">季數
           <select id="seasonSelect" style="width:100%;margin-top:6px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text)"><option value="">請選季數</option></select>
@@ -260,7 +271,7 @@
   const rarityBadge = r => r === 'four' ? '4★' : r === 'three' ? '3★' : '2★';
   const rarityEmoji = r => r === 'four' ? '⭐' : '';
   const laneLabel = l => l === 'left' ? '左' : '右';
-  const FRONTEND_VERSION = '1.8.0';
+  const FRONTEND_VERSION = '1.8.1';
   const EXPECTED_BACKEND_SCHEMA = 5;
   const STORE_HISTORY = 'cardDropTracker.history.v1';
   const STORE_DRAFT = 'cardDropTracker.draft.v1';
