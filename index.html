@@ -176,7 +176,7 @@
 
     <section class="panel">
       <div class="panel-title">最近掉卡</div>
-      <div class="recent" id="recentList"><span class="empty">還沒有紀錄</span></div><div class="tip">點選最近掉卡可快速修正卡號、左右道與簽卡；不影響已完成的歷史紀錄。</div>
+      <div class="recent" id="recentList"><span class="empty">還沒有紀錄</span></div><div id="specialLiveSummary" class="tip" aria-live="polite">本局尚無四星或簽卡。</div><div class="tip">點選最近掉卡可快速修正卡號、左右道與簽卡；不影響已完成的歷史紀錄。</div>
     </section>
 
     <section class="panel">
@@ -280,7 +280,7 @@
   const rarityBadge = r => r === 'four' ? '4★' : r === 'three' ? '3★' : '2★';
   const rarityEmoji = r => r === 'four' ? '⭐' : '';
   const laneLabel = l => l === 'left' ? '左' : '右';
-  const FRONTEND_VERSION = '1.9.1';
+  const FRONTEND_VERSION = '1.9.2';
   const EXPECTED_BACKEND_SCHEMA = 6;
   const STORE_HISTORY = 'cardDropTracker.history.v1';
   const STORE_DRAFT = 'cardDropTracker.draft.v1';
@@ -492,6 +492,10 @@
     $('#countRare').textContent=records.filter(isSignedRecord).length;
     $('#sessionLabel').textContent=records.length ? `本局 ${records.length} 張・開始於 ${nowText(sessionStartedAt)}` : '新的一局・尚未掉卡';
     renderFourTracking(records);
+    const recentEvents=specialDropEvents(records);
+    $('#specialLiveSummary').textContent=recentEvents.length
+      ?'最近特殊掉卡：'+recentEvents.slice(-3).map(e=>laneLabel(e.lane)+'道 '+specialIntervalLabel(e)).join('；')
+      :'本局尚無四星或簽卡。';
     const recent=$('#recentList'); recent.innerHTML='';
     if(!records.length){ recent.innerHTML='<span class="empty">還沒有紀錄</span>'; return; }
     records.slice(-8).reverse().forEach((x,idx)=>{
