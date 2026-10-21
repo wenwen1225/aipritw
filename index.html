@@ -517,8 +517,8 @@
         const localTitle=playLocation||'未填地點';
         const cloudTitle=remote.data.playLocation||'未填地點';
         const choice='本機草稿：'+records.length+' 張｜'+localTitle+'｜'+(playDate||'日期未填')+
-          '\\n雲端草稿：'+remote.data.records.length+' 張｜'+cloudTitle+'｜'+(remote.data.playDate||'日期未填')+
-          '\\n\\n按「確定」將載入雲端草稿並取代此裝置的未完成草稿；按「取消」保留此裝置的草稿。';
+          '\n雲端草稿：'+remote.data.records.length+' 張｜'+cloudTitle+'｜'+(remote.data.playDate||'日期未填')+
+          '\n\n按「確定」將載入雲端草稿並取代此裝置的未完成草稿；按「取消」保留此裝置的草稿。';
         if(!confirm(choice)){draftStatus('已保留這台裝置的 '+records.length+' 張本機草稿，沒有覆蓋');return;}
       }
       applyRemoteDraft_(remote);
