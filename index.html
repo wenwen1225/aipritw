@@ -109,6 +109,10 @@
     .play-date-weekday{font-size:13px;font-weight:800;color:var(--purple);text-align:right;padding:0 3px;line-height:1.5}
     .classification-grid>*{min-width:0}
     .classification-grid select{box-sizing:border-box;min-width:0;max-width:100%}
+    .location-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:9px;margin-bottom:14px}
+    .location-field{font-size:13px;font-weight:800;color:var(--muted);min-width:0;display:block}
+    .location-field select,.location-field input{font:inherit;font-weight:500;box-sizing:border-box;display:block;width:100%;min-width:0;max-width:100%;min-height:46px;margin-top:6px;padding:10px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text)}
+    @media(max-width:420px){.location-grid{grid-template-columns:1fr}}
     @media (min-width:560px){.cards-grid{grid-template-columns:repeat(10,1fr)}.card-btn{min-height:50px}.app{padding-left:20px;padding-right:20px}}
   </style>
 </head>
@@ -126,6 +130,14 @@
         <label for="playDateInput" class="play-date-label">實際遊玩日期（年／月／日）</label>
         <input id="playDateInput" type="date" required aria-describedby="playWeekday">
         <div class="play-date-weekday" id="playWeekday" aria-live="polite">星期－</div>
+      </div>
+      <div class="location-grid">
+        <label class="location-field">縣市
+          <select id="citySelect" aria-label="遊玩縣市"><option value="">請選縣市</option></select>
+        </label>
+        <label class="location-field">遊玩地點（手動輸入）
+          <input id="playLocationInput" type="text" maxlength="150" placeholder="例：板橋環球2樓" autocomplete="off">
+        </label>
       </div>
       <div class="classification-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
         <label style="font-size:13px;font-weight:800;color:var(--muted)">季數
@@ -271,8 +283,8 @@
   const rarityBadge = r => r === 'four' ? '4★' : r === 'three' ? '3★' : '2★';
   const rarityEmoji = r => r === 'four' ? '⭐' : '';
   const laneLabel = l => l === 'left' ? '左' : '右';
-  const FRONTEND_VERSION = '1.8.1';
-  const EXPECTED_BACKEND_SCHEMA = 5;
+  const FRONTEND_VERSION = '1.9.0';
+  const EXPECTED_BACKEND_SCHEMA = 6;
   const STORE_HISTORY = 'cardDropTracker.history.v1';
   const STORE_DRAFT = 'cardDropTracker.draft.v1';
   const STORE_CLOUD = 'cardDropTracker.cloudConfig.v1';
@@ -291,6 +303,8 @@
   let signed = false;
   const draft=load(STORE_DRAFT,null);
   let playDate=playDateValid(draft?.playDate)?draft.playDate:localToday();
+  let city=String(draft?.city||load('cardDropTracker.lastCity.v1','')||'');
+  let playLocation=String(draft?.playLocation||load('cardDropTracker.lastLocation.v1','')||'');
   let records=Array.isArray(draft?.records)?draft.records:[];
   let sessionStartedAt=draft?.startedAt&&!isNaN(Date.parse(draft.startedAt))?new Date(draft.startedAt):new Date();
   const DEFAULT_CLOUD_URL = 'https://script.google.com/macros/s/AKfycbzVH590xEb1zqSQVz2DOvfZEYoiG4UgHCwhB54DvkzXYUbhKpwTjICCLIoKVra8tlQu-A/exec';
@@ -302,7 +316,7 @@
 
   function load(key, fallback){ try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
   function save(key, value){ localStorage.setItem(key, JSON.stringify(value)); }
-  function saveDraft(){save(STORE_DRAFT,{startedAt:sessionStartedAt.toISOString(),records,playDate});}
+  function saveDraft(){save(STORE_DRAFT,{startedAt:sessionStartedAt.toISOString(),records,playDate,city,playLocation});}
   function cloudStatus(msg){const el=$('#cloudStatus');el.textContent=msg;el.title=msg;}
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   function cloudReady(){return cloudConfig&&/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(cloudConfig.url);}
@@ -630,17 +644,19 @@
   }
 
   function makeSession(){
-    return {playDate,season:Number(category.season),wave:Number(category.wave),edition:category.edition,id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), startedAt:sessionStartedAt.toISOString(), endedAt:new Date().toISOString(), records:(typeof structuredClone === 'function') ? structuredClone(records) : JSON.parse(JSON.stringify(records))};
+    return {playDate,city,playLocation,season:Number(category.season),wave:Number(category.wave),edition:category.edition,id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), startedAt:sessionStartedAt.toISOString(), endedAt:new Date().toISOString(), records:(typeof structuredClone === 'function') ? structuredClone(records) : JSON.parse(JSON.stringify(records))};
   }
 
   function saveAndNew(){
     if(!category.season||!category.wave||!category.edition){toast('請先選擇季數、彈數和版本');$('#resultOverlay').classList.remove('show');return;}
     if(!playDateValid(playDate)){toast('請選擇正確遊玩日期');$('#resultOverlay').classList.remove('show');return;}
+    if(!city||!playLocation.trim()){toast('請先選擇縣市並填寫遊玩地點');$('#resultOverlay').classList.remove('show');return;}
     const session=makeSession(); history.unshift(session); save(STORE_HISTORY,history);
     records=[]; sessionStartedAt=new Date(); playDate=localToday();$('#playDateInput').value=playDate;$('#playWeekday').textContent=playWeekday(playDate);saveDraft(); setLane('left'); setSigned(false);
     $('#resultOverlay').classList.remove('show'); renderCurrent(); renderHistory(); toast('本局已存於本機'); if(cloudReady())syncCloud();
   }
 
+  function shortPlayDateLabel(s){const v=playDateValid(s.playDate)?s.playDate:String(s.startedAt||'').slice(0,10);return /^\d{4}-\d{2}-\d{2}$/.test(v)?v.slice(2).replace(/-/g,'/'):'日期未設定';}
   function playDateLabel(s){return s.playDate&&playDateValid(s.playDate)?s.playDate+'（'+playWeekday(s.playDate)+'）':'建立於 '+fullText(new Date(s.startedAt))+'（舊紀錄）';}
   function categoryLabel(s){return s.season&&s.wave&&s.edition?`第${s.season}季・第${s.wave}彈・${s.edition}`:'未分類';}
   function renderHistory(){
@@ -651,14 +667,14 @@
     filtered.slice(0,30).forEach(s=>{
       const rare=s.records.filter(isSignedRecord).length;
       const item=document.createElement('div'); item.className='history-item';
-      item.innerHTML=`<div class="history-head"><b>${playDateLabel(s)}・${s.records.length} 張</b><button class="text-btn">查看</button></div><div class="history-summary">${categoryLabel(s)}｜左 ${s.records.filter(x=>x.lane==='left').length}｜右 ${s.records.filter(x=>x.lane==='right').length}｜簽卡 ${rare}</div>`;
+      item.innerHTML=`<div class="history-head"><b>${s.city||"未設定縣市"} ${shortPlayDateLabel(s)}・${s.records.length} 張</b><button class="text-btn">查看</button></div><div class="history-summary">${categoryLabel(s)}｜左 ${s.records.filter(x=>x.lane==='left').length}｜右 ${s.records.filter(x=>x.lane==='right').length}｜簽卡 ${rare}</div>`;
       item.querySelector('button').addEventListener('click',()=>openHistory(s.id)); box.appendChild(item);
     });
   }
 
   function openHistory(id){
     const s=history.find(x=>x.id===id); if(!s) return; selectedHistoryId=id;
-    $('#historyMeta').textContent=`${fullText(new Date(s.startedAt))} ～ ${fullText(new Date(s.endedAt))}・共 ${s.records.length} 張｜${categoryLabel(s)}｜${playDateLabel(s)}`;
+    $('#historyMeta').textContent=`${fullText(new Date(s.startedAt))} ～ ${fullText(new Date(s.endedAt))}・共 ${s.records.length} 張｜${categoryLabel(s)}｜${playDateLabel(s)}｜${s.city||'未設定縣市'} ${s.playLocation||'未填地點'}`;
     fillFourEvents($('#historyFourEvents'),s.records); fillLog($('#historyLog'),s.records); $('#historyLaneSummary').innerHTML=laneSummaryHtml(s.records); $('#historyOverlay').classList.add('show');
   }
 
@@ -689,6 +705,12 @@
   $('#playDateInput').value=playDate;
   $('#playWeekday').textContent=playWeekday(playDate);
   $('#playDateInput').addEventListener('change',()=>{const val=$('#playDateInput').value;if(!playDateValid(val)){toast('無效日期');return;}playDate=val;$('#playWeekday').textContent=playWeekday(playDate);saveDraft();});
+  const cities=['臺北市','新北市','桃園市','臺中市','臺南市','高雄市','基隆市','新竹市','嘉義市','新竹縣','苗栗縣','彰化縣','南投縣','雲林縣','嘉義縣','屏東縣','宜蘭縣','花蓮縣','臺東縣','澎湖縣','金門縣','連江縣'];
+  cities.forEach(name=>$('#citySelect').add(new Option(name,name)));
+  $('#citySelect').value=city;
+  $('#playLocationInput').value=playLocation;
+  $('#citySelect').addEventListener('change',()=>{city=$('#citySelect').value;save('cardDropTracker.lastCity.v1',city);saveDraft();});
+  $('#playLocationInput').addEventListener('input',()=>{playLocation=$('#playLocationInput').value;save('cardDropTracker.lastLocation.v1',playLocation);saveDraft();});
   initCategory();
   for(let n=1;n<=10;n++)$('#historySeason').add(new Option('第 '+n+' 季',String(n)));
   for(let n=1;n<=6;n++)$('#historyWave').add(new Option('第 '+n+' 彈',String(n)));
