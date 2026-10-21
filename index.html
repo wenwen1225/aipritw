@@ -115,7 +115,7 @@
     </header>
 
     <section class="panel">
-      <div class="panel-title">0｜本局卡片分類</div>
+      <div class="panel-title">0｜遊玩日期與卡片分類</div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px"><label style="font-size:13px;font-weight:800;color:var(--muted);flex:1;min-width:180px">實際遊玩日期（年／月／日）<input id="playDateInput" type="date" required style="display:block;width:100%;margin-top:6px;padding:11px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text);font:inherit"></label><span id="playWeekday" style="font-size:13px;font-weight:800;color:var(--purple)">星期－</span></div>
       <div class="classification-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
         <label style="font-size:13px;font-weight:800;color:var(--muted)">季數
           <select id="seasonSelect" style="width:100%;margin-top:6px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text)"><option value="">請選季數</option></select>
@@ -260,18 +260,26 @@
   const rarityBadge = r => r === 'four' ? '4★' : r === 'three' ? '3★' : '2★';
   const rarityEmoji = r => r === 'four' ? '⭐' : '';
   const laneLabel = l => l === 'left' ? '左' : '右';
-  const FRONTEND_VERSION = '1.7.0';
-  const EXPECTED_BACKEND_SCHEMA = 4;
+  const FRONTEND_VERSION = '1.8.0';
+  const EXPECTED_BACKEND_SCHEMA = 5;
   const STORE_HISTORY = 'cardDropTracker.history.v1';
   const STORE_DRAFT = 'cardDropTracker.draft.v1';
   const STORE_CLOUD = 'cardDropTracker.cloudConfig.v1';
   const STORE_DELETED = 'cardDropTracker.deletedIds.v1';
   const STORE_CATEGORY = 'cardDropTracker.category.v1';
 
+  const localToday=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');};
+  const playDateValid=value=>{
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(value||''))return false;
+    const [y,m,d]=value.split('-').map(Number),date=new Date(Date.UTC(y,m-1,d));
+    return date.getUTCFullYear()===y&&date.getUTCMonth()+1===m&&date.getUTCDate()===d;
+  };
+  const playWeekday=value=>playDateValid(value)?['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][new Date(value+'T00:00:00Z').getUTCDay()]:'日期不正確';
   let category=load(STORE_CATEGORY,{season:'',wave:'',edition:''});
   let lane = 'left';
   let signed = false;
   const draft=load(STORE_DRAFT,null);
+  let playDate=playDateValid(draft?.playDate)?draft.playDate:localToday();
   let records=Array.isArray(draft?.records)?draft.records:[];
   let sessionStartedAt=draft?.startedAt&&!isNaN(Date.parse(draft.startedAt))?new Date(draft.startedAt):new Date();
   const DEFAULT_CLOUD_URL = 'https://script.google.com/macros/s/AKfycbzVH590xEb1zqSQVz2DOvfZEYoiG4UgHCwhB54DvkzXYUbhKpwTjICCLIoKVra8tlQu-A/exec';
@@ -283,7 +291,7 @@
 
   function load(key, fallback){ try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
   function save(key, value){ localStorage.setItem(key, JSON.stringify(value)); }
-  function saveDraft(){save(STORE_DRAFT,{startedAt:sessionStartedAt.toISOString(),records});}
+  function saveDraft(){save(STORE_DRAFT,{startedAt:sessionStartedAt.toISOString(),records,playDate});}
   function cloudStatus(msg){const el=$('#cloudStatus');el.textContent=msg;el.title=msg;}
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   function cloudReady(){return cloudConfig&&/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(cloudConfig.url);}
@@ -361,7 +369,7 @@
     try{
       cloudStatus('讀取雲端中…');
       const before=await readCloud();
-      if(Number(before.schemaVersion)!==4)throw new Error('後端回傳版本：'+(before.schemaVersion??'未提供')+'，需要 v4。請確認已更新原 /exec 部署網址；本機紀錄保留');
+      if(Number(before.schemaVersion)!==EXPECTED_BACKEND_SCHEMA)throw new Error('後端為 v'+(before.schemaVersion??'未提供')+'，請先部署 GAS v'+EXPECTED_BACKEND_SCHEMA+'；本機紀錄保留');
       const deleted=new Set([...before.deleted,...deletedIds]);
       const remoteIds=new Set(before.sessions.map(x=>x.id));
       for(const id of deletedIds){if(!before.deleted.includes(id))await writeCloud({action:'delete',id});}
@@ -611,16 +619,18 @@
   }
 
   function makeSession(){
-    return {season:Number(category.season),wave:Number(category.wave),edition:category.edition,id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), startedAt:sessionStartedAt.toISOString(), endedAt:new Date().toISOString(), records:(typeof structuredClone === 'function') ? structuredClone(records) : JSON.parse(JSON.stringify(records))};
+    return {playDate,season:Number(category.season),wave:Number(category.wave),edition:category.edition,id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), startedAt:sessionStartedAt.toISOString(), endedAt:new Date().toISOString(), records:(typeof structuredClone === 'function') ? structuredClone(records) : JSON.parse(JSON.stringify(records))};
   }
 
   function saveAndNew(){
     if(!category.season||!category.wave||!category.edition){toast('請先選擇季數、彈數和版本');$('#resultOverlay').classList.remove('show');return;}
+    if(!playDateValid(playDate)){toast('請選擇正確遊玩日期');$('#resultOverlay').classList.remove('show');return;}
     const session=makeSession(); history.unshift(session); save(STORE_HISTORY,history);
-    records=[]; sessionStartedAt=new Date(); saveDraft(); setLane('left'); setSigned(false);
+    records=[]; sessionStartedAt=new Date(); playDate=localToday();$('#playDateInput').value=playDate;$('#playWeekday').textContent=playWeekday(playDate);saveDraft(); setLane('left'); setSigned(false);
     $('#resultOverlay').classList.remove('show'); renderCurrent(); renderHistory(); toast('本局已存於本機'); if(cloudReady())syncCloud();
   }
 
+  function playDateLabel(s){return s.playDate&&playDateValid(s.playDate)?s.playDate+'（'+playWeekday(s.playDate)+'）':'建立於 '+fullText(new Date(s.startedAt))+'（舊紀錄）';}
   function categoryLabel(s){return s.season&&s.wave&&s.edition?`第${s.season}季・第${s.wave}彈・${s.edition}`:'未分類';}
   function renderHistory(){
     const box=$('#historyList');box.innerHTML='';
@@ -630,14 +640,14 @@
     filtered.slice(0,30).forEach(s=>{
       const rare=s.records.filter(isSignedRecord).length;
       const item=document.createElement('div'); item.className='history-item';
-      item.innerHTML=`<div class="history-head"><b>${nowText(new Date(s.startedAt))}・${s.records.length} 張</b><button class="text-btn">查看</button></div><div class="history-summary">${categoryLabel(s)}｜左 ${s.records.filter(x=>x.lane==='left').length}｜右 ${s.records.filter(x=>x.lane==='right').length}｜簽卡 ${rare}</div>`;
+      item.innerHTML=`<div class="history-head"><b>${playDateLabel(s)}・${s.records.length} 張</b><button class="text-btn">查看</button></div><div class="history-summary">${categoryLabel(s)}｜左 ${s.records.filter(x=>x.lane==='left').length}｜右 ${s.records.filter(x=>x.lane==='right').length}｜簽卡 ${rare}</div>`;
       item.querySelector('button').addEventListener('click',()=>openHistory(s.id)); box.appendChild(item);
     });
   }
 
   function openHistory(id){
     const s=history.find(x=>x.id===id); if(!s) return; selectedHistoryId=id;
-    $('#historyMeta').textContent=`${fullText(new Date(s.startedAt))} ～ ${fullText(new Date(s.endedAt))}・共 ${s.records.length} 張｜${categoryLabel(s)}`;
+    $('#historyMeta').textContent=`${fullText(new Date(s.startedAt))} ～ ${fullText(new Date(s.endedAt))}・共 ${s.records.length} 張｜${categoryLabel(s)}｜${playDateLabel(s)}`;
     fillFourEvents($('#historyFourEvents'),s.records); fillLog($('#historyLog'),s.records); $('#historyLaneSummary').innerHTML=laneSummaryHtml(s.records); $('#historyOverlay').classList.add('show');
   }
 
@@ -665,6 +675,9 @@
       $(id).addEventListener('change',()=>{category[key]=$(id).value;save(STORE_CATEGORY,category);});
     }
   }
+  $('#playDateInput').value=playDate;
+  $('#playWeekday').textContent=playWeekday(playDate);
+  $('#playDateInput').addEventListener('change',()=>{const val=$('#playDateInput').value;if(!playDateValid(val)){toast('無效日期');return;}playDate=val;$('#playWeekday').textContent=playWeekday(playDate);saveDraft();});
   initCategory();
   for(let n=1;n<=10;n++)$('#historySeason').add(new Option('第 '+n+' 季',String(n)));
   for(let n=1;n<=6;n++)$('#historyWave').add(new Option('第 '+n+' 彈',String(n)));
