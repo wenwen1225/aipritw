@@ -262,7 +262,7 @@
       <div class="panel-title" style="margin-top:16px">左右道各自順序</div>
       <div id="historyLaneSummary" class="history-summary"></div>
       <div class="sheet-actions">
-        <button class="danger" id="deleteHistoryBtn">刪除此紀錄</button>
+        <button class="secondary" id="editHistoryBtn">編輯日期／地點</button><button class="danger" id="deleteHistoryBtn">刪除此紀錄</button>
         <button class="primary" id="closeHistoryBtn">關閉</button>
       </div>
     </div>
@@ -280,7 +280,7 @@
   const rarityBadge = r => r === 'four' ? '4★' : r === 'three' ? '3★' : '2★';
   const rarityEmoji = r => r === 'four' ? '⭐' : '';
   const laneLabel = l => l === 'left' ? '左' : '右';
-  const FRONTEND_VERSION = '2.0.0';
+  const FRONTEND_VERSION = '2.0.1';
   const EXPECTED_BACKEND_SCHEMA = 7;
   const STORE_HISTORY = 'cardDropTracker.history.v1';
   const STORE_DRAFT = 'cardDropTracker.draft.v1';
@@ -751,6 +751,52 @@
   $('#copyBtn').addEventListener('click',async()=>{ try{ await navigator.clipboard.writeText(exportText()); toast('已複製'); }catch{ toast('瀏覽器不允許自動複製'); } });
   $('#csvBtn').addEventListener('click',exportCSV);
   $('#closeHistoryBtn').addEventListener('click',()=>$('#historyOverlay').classList.remove('show'));
+  $('#editHistoryBtn').addEventListener('click',async()=>{
+    if(cloudBusy||!selectedHistoryId){toast('雲端正在處理，請稍候');return;}
+    const id=selectedHistoryId,existing=history.find(x=>x.id===id);
+    if(!existing)return;
+    const date=prompt('修改實際遊玩日期（YYYY-MM-DD）',existing.playDate||localToday());
+    if(date===null)return;
+    if(!playDateValid(date.trim())){toast('日期格式錯誤');return;}
+    const venue=prompt('修改遊玩地點',existing.playLocation||'');
+    if(venue===null)return;
+    if(!venue.trim()||venue.trim().length>150){toast('地點必填，最多 150 字');return;}
+    if(!confirm('確定更新這局的遊玩日期及地點？卡號與掉卡順序不會更動。'))return;
+    cloudBusy=true;$('#editHistoryBtn').disabled=true;$('#cloudSyncBtn').disabled=true;
+    try{
+      cloudStatus('讀取雲端版本，確認可以編輯…');
+      const before=await readCloud();
+      if(Number(before.schemaVersion)!==EXPECTED_BACKEND_SCHEMA)throw new Error('後端需要 v'+EXPECTED_BACKEND_SCHEMA+' 才能編輯');
+      const remote=before.sessions.find(x=>x.id===id);
+      if(!remote)throw new Error('雲端找不到這筆紀錄，已保留原資料');
+      const updates={playDate:date.trim(),playLocation:venue.trim(),
+        season:remote.season,wave:remote.wave,edition:remote.edition,
+        expectedSyncTime:remote.syncTime||''};
+      cloudStatus('先備份並更新 Google Sheets…');
+      await writeCloud({action:'updateMeta',id,changes:updates});
+      let verified=null;
+      for(let attempt=0;attempt<5;attempt++){
+        await sleep(1000+attempt*1000);
+        const result=await readCloud();
+        const found=result.sessions.find(x=>x.id===id);
+        if(found&&found.playDate===updates.playDate&&found.playLocation===updates.playLocation){
+          verified=found;break;
+        }
+      }
+      if(!verified)throw new Error('雲端尚未確認修改，原本機資料保留，請稍後同步');
+      history=history.map(x=>x.id===id?verified:x);
+      save(STORE_HISTORY,history);
+      renderHistory();
+      openHistory(id);
+      cloudStatus('✓ 歷史紀錄修改完成，雲端已驗證');
+      toast('日期與地點已同步修改');
+    }catch(err){
+      cloudStatus('⚠ '+err.message+'；本機紀錄未覆蓋');
+      toast('歷史編輯未完成');
+    }finally{
+      cloudBusy=false;$('#editHistoryBtn').disabled=false;$('#cloudSyncBtn').disabled=false;
+    }
+  });
   $('#deleteHistoryBtn').addEventListener('click',async()=>{
     if(!selectedHistoryId||cloudBusy)return;
     const id=selectedHistoryId;
