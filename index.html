@@ -133,6 +133,15 @@
     .cloud-version-result[hidden]{display:none}
     @media(max-width:480px){.cloud-manage-content{width:calc(200% + 9px);max-width:none;transform:translateX(calc(-50% - 4.5px))}}
     @media(min-width:481px){.cloud-manage-content{width:300px;transform:translateX(-90px)}}
+    /* Prevent narrow iPhone viewport overflow in overlays and cloud manager. */
+    .sheet{box-sizing:border-box;max-width:100%;overflow-x:hidden}
+    .sheet-actions{flex-wrap:wrap}
+    .sheet-actions button{min-width:0;white-space:normal;overflow-wrap:anywhere}
+    .cloud-manage-content{width:100%;max-width:100%;transform:none!important}
+    .cloud-manage[open]{grid-column:1 / -1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:9px}
+    .cloud-manage[open]>.cloud-manage-toggle{grid-column:2}
+    .cloud-manage[open]>.cloud-manage-content{grid-column:1 / -1;width:100%}
+    @media(max-width:480px){.cloud-manage-content{max-width:100%;width:100%}}
     @media (min-width:560px){.cards-grid{grid-template-columns:repeat(10,1fr)}.card-btn{min-height:50px}.app{padding-left:20px;padding-right:20px}}
   </style>
 </head>
@@ -318,7 +327,7 @@
   const rarityBadge = r => r === 'four' ? '4★' : r === 'three' ? '3★' : '2★';
   const rarityEmoji = r => r === 'four' ? '⭐' : '';
   const laneLabel = l => l === 'left' ? '左' : '右';
-  const FRONTEND_VERSION = '2.1.1';
+  const FRONTEND_VERSION = '2.1.2';
   const EXPECTED_BACKEND_SCHEMA = 8;
   const STORE_HISTORY = 'cardDropTracker.history.v1';
   const STORE_DRAFT = 'cardDropTracker.draft.v1';
@@ -504,7 +513,14 @@
       if(history.some(x=>x.startedAt===remote.data.startedAt)){
         draftStatus('雲端草稿屬於已完成的局數，未重新載入');return;
       }
-      if(records.length&&!confirm('目前這台有 '+records.length+' 張未完成紀錄；確定要改為雲端的 '+remote.data.records.length+' 張嗎？\n目前的本機草稿將被取代。'))return;
+      if(records.length){
+        const localTitle=playLocation||'未填地點';
+        const cloudTitle=remote.data.playLocation||'未填地點';
+        const choice='本機草稿：'+records.length+' 張｜'+localTitle+'｜'+(playDate||'日期未填')+
+          '\\n雲端草稿：'+remote.data.records.length+' 張｜'+cloudTitle+'｜'+(remote.data.playDate||'日期未填')+
+          '\\n\\n按「確定」將載入雲端草稿並取代此裝置的未完成草稿；按「取消」保留此裝置的草稿。';
+        if(!confirm(choice)){draftStatus('已保留這台裝置的 '+records.length+' 張本機草稿，沒有覆蓋');return;}
+      }
       applyRemoteDraft_(remote);
     }catch(err){draftStatus('⚠ '+err.message);}
   }
@@ -542,7 +558,7 @@
       draftStatus('✓ 本機與雲端草稿一致（'+records.length+' 張）');return;
     }
     draftReady=true;draftConflict=true;
-    draftStatus('⚠ 雲端有不同的未完成草稿，請點「讀取雲端草稿」比較後選擇；本機未覆蓋');
+    draftStatus('⚠ 本機 '+records.length+' 張／雲端 '+remote.data.records.length+' 張草稿不同。點「讀取雲端草稿」比較，未自動覆蓋。');
   }
   async function syncCloud(){
     if(cloudBusy)return;
@@ -600,7 +616,7 @@
       history=[...merged.values()].sort((a,b)=>b.startedAt.localeCompare(a.startedAt));
       save(STORE_HISTORY,history);
       deletedIds=[];save(STORE_DELETED,deletedIds);
-      renderHistory();cloudStatus('✓ 同步完成，共 '+history.length+' 局');toast('雲端同步完成');
+      renderHistory();cloudStatus('✓ 已核對 Google Sheets，共 '+history.length+' 局');toast('歷史紀錄已核對雲端');
       if(!draftReady)reconcileCloudDraft_(after.draft);
       else if(after.draft?.data&&history.some(x=>x.startedAt===after.draft.data.startedAt))draftPendingClear=after.draft.data.startedAt;
       else if(after.draft?.revision&&after.draft.revision!==draftRevision&&records.length){draftConflict=true;draftStatus('⚠ 另一裝置已有新版草稿，請使用「讀取雲端草稿」比較；本機保留');}
@@ -1011,24 +1027,50 @@
     finally{cloudBusy=false;$('#editHistoryCardsBtn').disabled=false;$('#cloudSyncBtn').disabled=false;}
   });
   $('#deleteHistoryBtn').addEventListener('click',async()=>{
-    if(!selectedHistoryId||cloudBusy)return;
+    if(!selectedHistoryId||cloudBusy||draftSaving)return;
     const id=selectedHistoryId;
     const record=history.find(x=>x.id===id);
     if(!record)return;
     const answer=prompt('永久刪除這局（'+record.records.length+' 張）會同時移除 Google Sheets 局數及卡片明細。系統會先備份，無法從網頁復原。請輸入「永久刪除」確認：');
     if(answer!=='永久刪除'){if(answer!==null)toast('未刪除，確認文字不相符');return;}
     if(!cloudReady()){toast('雲端尚未連線，沒有刪除資料');return;}
-    try {
-      cloudStatus('確認永久刪除後端版本中…');
-      const remote=await readCloud();
-      if(Number(remote.schemaVersion)!==EXPECTED_BACKEND_SCHEMA)throw new Error('後端版本不相容，未刪除資料');
-      // Retain tombstone locally until the backend confirms the deletion.
-      deletedIds=[...new Set([...deletedIds,id])];save(STORE_DELETED,deletedIds);
+    cloudBusy=true;
+    const btn=$('#deleteHistoryBtn');
+    btn.disabled=true;$('#cloudSyncBtn').disabled=true;
+    try{
+      cloudStatus('確認後端及待刪除紀錄…');
+      const before=await readCloud();
+      if(Number(before.schemaVersion)!==EXPECTED_BACKEND_SCHEMA)throw new Error('後端版本不相容，未刪除資料');
+      if(before.deleted.includes(id)&&!before.sessions.some(s=>s.id===id)){
+        // Another device already confirmed this deletion.
+        history=history.filter(x=>x.id!==id);save(STORE_HISTORY,history);
+        deletedIds=deletedIds.filter(x=>x!==id);save(STORE_DELETED,deletedIds);
+        $('#historyOverlay').classList.remove('show');renderHistory();
+        cloudStatus('✓ 雲端已確認刪除這局');toast('已確認刪除');return;
+      }
+      if(!before.sessions.some(s=>s.id===id))throw new Error('雲端找不到這一局，請先同步確認；本機未移除');
+      cloudStatus('送出刪除請求（本機紀錄暫時保留）…');
+      await writeCloud({action:'delete',id});
+      let confirmed=false;
+      for(let attempt=1;attempt<=5;attempt++){
+        cloudStatus('確認雲端刪除（第 '+attempt+'/5 次）…');
+        await sleep(attempt===1?1300:attempt*1600);
+        const after=await readCloud();
+        if(after.deleted.includes(id)&&!after.sessions.some(x=>x.id===id)){confirmed=true;break;}
+      }
+      if(!confirmed)throw new Error('未能確認後端刪除；本機紀錄保留，請稍後同步核對');
+      // Only now remove the local copy, after the cloud tombstone and absence were verified.
       history=history.filter(x=>x.id!==id);save(STORE_HISTORY,history);
+      deletedIds=deletedIds.filter(x=>x!==id);save(STORE_DELETED,deletedIds);
+      selectedHistoryId=null;
       $('#historyOverlay').classList.remove('show');renderHistory();
-      cloudStatus('永久刪除送出中，等待雲端確認…');
-      await syncCloud();
-    } catch(err) {cloudStatus('⚠ '+err.message);toast('未送出刪除：'+err.message);}
+      cloudStatus('✓ 已確認 Google Sheets 刪除完成');toast('此局已安全刪除');
+    }catch(err){
+      cloudStatus('⚠ 刪除尚未確認：'+err.message+'；本機紀錄保留');
+      toast('刪除尚未確認，原紀錄仍保留');
+    }finally{
+      cloudBusy=false;btn.disabled=false;$('#cloudSyncBtn').disabled=false;
+    }
   });
   async function checkVersions(){
     const btn=$('#versionCheckBtn'),out=$('#versionCheckResult');
