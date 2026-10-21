@@ -280,8 +280,8 @@
   const rarityBadge = r => r === 'four' ? '4★' : r === 'three' ? '3★' : '2★';
   const rarityEmoji = r => r === 'four' ? '⭐' : '';
   const laneLabel = l => l === 'left' ? '左' : '右';
-  const FRONTEND_VERSION = '1.9.2';
-  const EXPECTED_BACKEND_SCHEMA = 6;
+  const FRONTEND_VERSION = '2.0.0';
+  const EXPECTED_BACKEND_SCHEMA = 7;
   const STORE_HISTORY = 'cardDropTracker.history.v1';
   const STORE_DRAFT = 'cardDropTracker.draft.v1';
   const STORE_CLOUD = 'cardDropTracker.cloudConfig.v1';
@@ -313,7 +313,7 @@
   function load(key, fallback){ try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
   function save(key, value){ localStorage.setItem(key, JSON.stringify(value)); }
   function saveDraft(){save(STORE_DRAFT,{startedAt:sessionStartedAt.toISOString(),records,playDate,playLocation});}
-  function cloudStatus(msg){const el=$('#cloudStatus');el.textContent=msg;el.title=msg;}
+  function cloudStatus(msg){const el=$('#cloudStatus');el.textContent=msg;el.title=msg;el.style.color=msg.startsWith('✓')?'#137b55':msg.startsWith('⚠')?'#bc395e':'var(--muted)';}
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   function cloudReady(){return cloudConfig&&/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(cloudConfig.url);}
   async function readCloud(){
@@ -469,7 +469,7 @@
   function addRecord(card){
     const rarity = rarityForCard(card);
     const laneAtDrop=lane;
-    const before=fourStarTracking(records).state[laneAtDrop].normal;
+    const before=trackIntervals(records).state[laneAtDrop].normal;
     records.push({card,lane:laneAtDrop,rarity,signed,time:new Date().toISOString()});
     saveDraft();
     const wasSigned=signed;
@@ -528,44 +528,35 @@
   function isSignedRecord(x){ return x.signed === true || x.rarity === 'sign'; }
   function isNormalRecord(x){ return normalizeRarity(x) !== 'four' && !isSignedRecord(x); }
 
-  function fourStarTracking(list){
-    const state={
-      left:{normal:0,currentCards:[],events:[]},
-      right:{normal:0,currentCards:[],events:[]}
-    };
-    const byIndex=new Map();
-    list.forEach((x,i)=>{
-      const laneState=state[x.lane];
-      if(normalizeRarity(x)==='four'){
-        const event={
-          index:i,card:x.card,lane:x.lane,normalBefore:laneState.normal,
-          normalCardsBefore:[...laneState.currentCards],signed:isSignedRecord(x),time:x.time
-        };
-        laneState.events.push(event);
-        byIndex.set(i,event);
-        laneState.normal=0;
-        laneState.currentCards=[];
-      }else if(isNormalRecord(x)){
-        laneState.normal+=1;
-        laneState.currentCards.push(x.card);
+  // Normal-card intervals are shared by four-star and signed-card drops.
+  // Keep separate counters for left/right lanes, reset either when a special card appears.
+  function trackIntervals(list){
+    const lanes={left:{normal:0,cards:[],events:[]},right:{normal:0,cards:[],events:[]}};
+    const byIndex=new Map(),events=[];
+    list.forEach((r,index)=>{
+      const lane=lanes[r.lane];if(!lane)return;
+      const four=normalizeRarity(r)==='four',signed=isSignedRecord(r);
+      if(four||signed){
+        const event={index,card:r.card,lane:r.lane,normalBefore:lane.normal,
+          normalCardsBefore:[...lane.cards],signed,kind:four&&signed?'both':four?'four':'signed',time:r.time};
+        lane.events.push(event);byIndex.set(index,event);
+        if(four)events.push({...event,kind:'four',count:event.normalBefore});
+        if(signed)events.push({...event,kind:'signed',count:event.normalBefore});
+        lane.normal=0;lane.cards=[];
+      }else{
+        lane.normal++;lane.cards.push(r.card);
       }
     });
-    return {state,byIndex};
+    return {state:lanes,byIndex,events};
   }
-
-  function specialDropEvents(list){
-    const counters={left:{four:0,signed:0},right:{four:0,signed:0}},events=[];
-    list.forEach((r,index)=>{
-      const lane=counters[r.lane];if(!lane)return;
-      const four=normalizeRarity(r)==='four',sig=isSignedRecord(r);
-      if(four)events.push({index,lane:r.lane,card:r.card,kind:'four',count:lane.four});
-      if(sig)events.push({index,lane:r.lane,card:r.card,kind:'signed',count:lane.signed});
-      if(four)lane.four=0;
-      if(sig)lane.signed=0;
-      if(!four&&!sig){lane.four++;lane.signed++;}
-    });
-    return events;
+  function fourStarTracking(list){
+    const data=trackIntervals(list);
+    return {state:{
+      left:{...data.state.left,events:data.state.left.events.filter(e=>e.kind==='four'||e.kind==='both')},
+      right:{...data.state.right,events:data.state.right.events.filter(e=>e.kind==='four'||e.kind==='both')}
+    },byIndex:data.byIndex};
   }
+  function specialDropEvents(list){return trackIntervals(list).events;}
   function specialIntervalLabel(e){return (e.kind==='four'?'✨ 四星':'✍️ 簽卡')+' '+e.card+'｜前面 '+e.count+' 張普卡';}
 
   function renderFourTracking(list=records){
@@ -677,7 +668,7 @@
     if(!playLocation.trim()){toast('請先填寫遊玩地點');$('#resultOverlay').classList.remove('show');return;}
     const session=makeSession(); history.unshift(session); save(STORE_HISTORY,history);
     records=[]; sessionStartedAt=new Date(); playDate=localToday();$('#playDateInput').value=playDate;$('#playWeekday').textContent=playWeekday(playDate);saveDraft(); setLane('left'); setSigned(false);
-    $('#resultOverlay').classList.remove('show'); renderCurrent(); renderHistory(); toast('本局已存於本機'); if(cloudReady())syncCloud();
+    $('#resultOverlay').classList.remove('show'); renderCurrent(); renderHistory(); toast('本機已儲存，等待雲端確認');cloudStatus('本機已儲存・待同步'); if(cloudReady())syncCloud();
   }
 
   function escapeHtml_(value){return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
@@ -689,10 +680,21 @@
     const season=$('#historySeason').value,wave=$('#historyWave').value,edition=$('#historyEdition').value;
     const filtered=history.filter(s=>(!season||String(s.season)===season)&&(!wave||String(s.wave)===wave)&&(!edition||s.edition===edition));
     if(!filtered.length){box.innerHTML='<span class="empty">沒有符合條件的歷史紀錄。</span>';return;}
+    // Compact overview for the currently selected filters.
+    const tally=filtered.reduce((acc,session)=>{
+      acc.cards+=session.records.length;
+      session.records.forEach(r=>{if(normalizeRarity(r)==='four')acc.four++;if(isSignedRecord(r))acc.signed++;});
+      return acc;
+    },{cards:0,four:0,signed:0});
+    const overview=document.createElement('div');
+    overview.className='history-summary';
+    overview.style.margin='0 0 9px';
+    overview.textContent=filtered.length+' 局｜'+tally.cards+' 張｜✨四星 '+tally.four+' 張｜✍️簽卡 '+tally.signed+' 張';
+    box.appendChild(overview);
     filtered.slice(0,30).forEach(s=>{
       const rare=s.records.filter(isSignedRecord).length;
       const item=document.createElement('div'); item.className='history-item';
-      item.innerHTML=`<div class="history-head"><b>${escapeHtml_(s.playLocation||"未填地點")}・${shortPlayDateLabel(s)}・${s.records.length} 張</b><button class="text-btn">查看</button></div><div class="history-summary">${categoryLabel(s)}｜左 ${s.records.filter(x=>x.lane==='left').length}｜右 ${s.records.filter(x=>x.lane==='right').length}｜簽卡 ${rare}</div>`;
+      item.innerHTML=`<div class="history-head"><b>${escapeHtml_(s.playLocation||"未填地點")}・${shortPlayDateLabel(s)}・${s.records.length} 張</b><button class="text-btn">查看</button></div><div class="history-summary">${categoryLabel(s)}｜左 ${s.records.filter(x=>x.lane==='left').length}｜右 ${s.records.filter(x=>x.lane==='right').length}｜簽卡 ${rare}｜✨四星 ${s.records.filter(x=>normalizeRarity(x)==='four').length}</div>`;
       item.querySelector('button').addEventListener('click',()=>openHistory(s.id)); box.appendChild(item);
     });
   }
@@ -742,7 +744,10 @@
   $('#undoBtn').addEventListener('click',()=>{ if(records.length){ const x=records.pop(); saveDraft(); renderCurrent(); toast(`已撤銷 ${laneLabel(x.lane)}道 ${x.card}`); } });
   $('#finishBtn').addEventListener('click',openResult);
   $('#closeResultBtn').addEventListener('click',()=>$('#resultOverlay').classList.remove('show'));
-  $('#saveNextBtn').addEventListener('click',saveAndNew);
+  $('#saveNextBtn').addEventListener('click',()=>{
+    if(!confirm('確認完成本局並保存 '+records.length+' 張卡片嗎？保存後會開始新的一局。'))return;
+    saveAndNew();
+  });
   $('#copyBtn').addEventListener('click',async()=>{ try{ await navigator.clipboard.writeText(exportText()); toast('已複製'); }catch{ toast('瀏覽器不允許自動複製'); } });
   $('#csvBtn').addEventListener('click',exportCSV);
   $('#closeHistoryBtn').addEventListener('click',()=>$('#historyOverlay').classList.remove('show'));
