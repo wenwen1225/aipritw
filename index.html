@@ -260,7 +260,7 @@
   const rarityBadge = r => r === 'four' ? '4★' : r === 'three' ? '3★' : '2★';
   const rarityEmoji = r => r === 'four' ? '⭐' : '';
   const laneLabel = l => l === 'left' ? '左' : '右';
-  const FRONTEND_VERSION = '1.6.2';
+  const FRONTEND_VERSION = '1.7.0';
   const EXPECTED_BACKEND_SCHEMA = 4;
   const STORE_HISTORY = 'cardDropTracker.history.v1';
   const STORE_DRAFT = 'cardDropTracker.draft.v1';
@@ -287,16 +287,36 @@
   function cloudStatus(msg){const el=$('#cloudStatus');el.textContent=msg;el.title=msg;}
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   function cloudReady(){return cloudConfig&&/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(cloudConfig.url);}
-  function readCloud(){
+  async function readCloud(){
+    if(!cloudReady())throw new Error('尚未設定 GAS 網址');
+    // Prefer same-origin JSON; Safari can reject cross-site Google Apps Script JSONP redirects.
+    const abort=new AbortController();
+    const timeout=setTimeout(()=>abort.abort(),22000);
+    try{
+      const response=await fetch('/api/cloud?url='+encodeURIComponent(cloudConfig.url),{
+        cache:'no-store',signal:abort.signal
+      });
+      const result=await response.json();
+      if(!response.ok||!result?.ok)throw new Error(result?.error||'雲端讀取失敗');
+      return result;
+    }catch(err){
+      // Keep the original JSONP method as a fallback for older deployments.
+      return await readCloudLegacy_(err);
+    }finally{clearTimeout(timeout);}
+  }
+  function readCloudLegacy_(firstError){
     return new Promise((resolve,reject)=>{
-      if(!cloudReady())return reject(new Error('尚未設定雲端'));
       const name='cloudCallback_'+Date.now()+'_'+Math.random().toString(36).slice(2);
       const script=document.createElement('script');
       let done=false;
-      const finish=(err,data)=>{if(done)return;done=true;clearTimeout(timer);delete window[name];script.remove();err?reject(err):resolve(data);};
-      const timer=setTimeout(()=>finish(new Error('雲端讀取逾時')),25000);
-      window[name]=data=>data?.ok?finish(null,data):finish(new Error(data?.error||'讀取失敗'));
-      script.onerror=()=>finish(new Error('無法連接 GAS，請確認部署權限'));
+      const finish=(err,data)=>{
+        if(done)return;
+        done=true;clearTimeout(timer);delete window[name];script.remove();
+        err?reject(new Error('雲端橋接：'+(firstError?.message||'連線失敗')+'；直接連線：'+err.message)):resolve(data);
+      };
+      const timer=setTimeout(()=>finish(new Error('讀取逾時')),18000);
+      window[name]=data=>data?.ok?finish(null,data):finish(new Error(data?.error||'回應失敗'));
+      script.onerror=()=>finish(new Error('瀏覽器無法載入 GAS 跨網站腳本'));
       script.src=cloudConfig.url+'?action=list&callback='+name;
       document.head.appendChild(script);
     });
