@@ -143,7 +143,26 @@
     .cloud-manage[open]>.cloud-manage-content{grid-column:1 / -1;width:100%}
     @media(max-width:480px){.cloud-manage-content{max-width:100%;width:100%}}
     @media (min-width:560px){.cards-grid{grid-template-columns:repeat(10,1fr)}.card-btn{min-height:50px}.app{padding-left:20px;padding-right:20px}}
-  </style>
+  
+    /* Responsive enhancements for desktop/tablet — 2026-10-23.
+       Existing phone card sizes and cloud operations are retained. */
+    @media (min-width: 820px) {
+      .app { max-width: 1020px; padding-left: 28px; padding-right: 28px; }
+      header { padding-top: 24px; padding-bottom: 18px; }
+      .panel { padding: 20px; }
+      .cards-grid { grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 10px; }
+      .card-btn { min-height: 54px; }
+      .panel, .stats, .four-track-grid { min-width: 0; }
+    }
+    @media (min-width: 481px) and (max-width: 819px) {
+      .app { width: 100%; max-width: 720px; }
+      .panel, .stats { min-width: 0; }
+    }
+    @media (max-width: 480px) {
+      .app { width: 100%; min-width: 0; }
+      .panel, .cards-grid, .stats, .four-track-grid { min-width: 0; }
+    }
+</style>
 </head>
 <body>
   <main class="app">
