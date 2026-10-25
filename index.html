@@ -217,6 +217,69 @@
         height:100%;
       }
     }
+
+    /* Cloud manager layout repair (mobile + desktop).
+       Keep actions on one row; expanded controls span the entire panel. */
+    .cloud-quick-row {
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:9px;
+      align-items:start;
+      width:100%;
+      min-width:0;
+    }
+    .cloud-quick-row > .cloud-sync-primary {
+      grid-column:1;
+      grid-row:1;
+      min-width:0;
+      position:relative;
+      z-index:2;
+    }
+    .cloud-quick-row > details.cloud-manage,
+    .cloud-quick-row > details.cloud-manage[open] {
+      grid-column:1 / -1;
+      grid-row:1;
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      grid-template-rows:auto auto;
+      column-gap:9px;
+      row-gap:9px;
+      width:100%;
+      min-width:0;
+      position:relative;
+      transform:none;
+      margin:0;
+    }
+    .cloud-quick-row > details.cloud-manage > summary.cloud-manage-toggle {
+      grid-column:2;
+      grid-row:1;
+      min-width:0;
+      margin:0;
+    }
+    .cloud-quick-row > details.cloud-manage > .cloud-manage-content {
+      grid-column:1 / -1;
+      grid-row:2;
+      position:static;
+      width:100%;
+      max-width:100%;
+      min-width:0;
+      margin:0;
+      transform:none!important;
+      box-sizing:border-box;
+    }
+    .cloud-quick-row .cloud-manage-actions {
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:9px;
+    }
+    .cloud-quick-row .cloud-manage-actions > button {
+      min-width:0;
+      overflow-wrap:anywhere;
+      white-space:normal;
+    }
+    @media (max-width:480px) {
+      .cloud-quick-row .cloud-manage-actions {grid-template-columns:minmax(0,1fr);}
+    }
+
 </style>
 </head>
 <body>
