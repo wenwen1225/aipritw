@@ -113,38 +113,81 @@
     .location-field{font-size:13px;font-weight:800;color:var(--muted);min-width:0;display:block}
     .location-field select,.location-field input{font:inherit;font-weight:500;box-sizing:border-box;display:block;width:100%;min-width:0;max-width:100%;min-height:46px;margin-top:6px;padding:10px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text)}
     @media(max-width:420px){.location-grid{grid-template-columns:1fr}}
-    /* Compact mobile cloud actions; native details keeps secondary controls available. */
-    .cloud-quick-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px;margin:10px 0 7px;align-items:start}
-    .cloud-sync-primary,.cloud-manage-toggle{display:flex;justify-content:center;align-items:center;gap:5px;min-height:44px;width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;background:#fff6f9;color:var(--text);font-size:13px;font-weight:750;padding:10px 8px;text-align:center;white-space:nowrap}
-    .cloud-sync-primary{background:#fbe4ed;color:#9f426c}
-    .cloud-manage{min-width:0;position:relative}
-    .cloud-manage-toggle{cursor:pointer;list-style:none;user-select:none}
-    .cloud-manage-toggle::-webkit-details-marker{display:none}
-    .cloud-manage-arrow{display:inline-block;transition:transform .2s}
-    .cloud-manage[open] .cloud-manage-arrow{transform:rotate(180deg)}
-    .cloud-manage[open]{grid-column:2}
-    .cloud-manage-content{position:relative;z-index:1;box-sizing:border-box;margin-top:8px;padding:12px;background:#fff8fa;border:1px solid var(--line);border-radius:13px;width:min(310px,calc(200vw - 46px));max-width:calc(100vw - 40px);transform:translateX(calc(-50% + 50% / 2))}
-    .cloud-manage-title{font-size:12px;font-weight:800;color:var(--muted);margin-bottom:10px}
-    .cloud-manage-actions{display:grid;grid-template-columns:1fr;gap:8px}
-    .cloud-manage-actions .text-btn{width:100%;min-height:39px;text-align:left;padding:9px 10px;border-radius:9px;background:#fff;border:1px solid var(--line)}
-    .cloud-main-status{font-size:11px;color:var(--muted);overflow-wrap:anywhere;line-height:1.6;margin:5px 0 9px}
-    .cloud-draft-status{font-size:12px;color:var(--muted);line-height:1.6;margin-top:10px;overflow-wrap:anywhere}
-    .cloud-version-result{font-size:12px;line-height:1.7;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:10px;white-space:pre-line;overflow-wrap:anywhere}
-    .cloud-version-result[hidden]{display:none}
-    @media(max-width:480px){.cloud-manage-content{width:calc(200% + 9px);max-width:none;transform:translateX(calc(-50% - 4.5px))}}
-    @media(min-width:481px){.cloud-manage-content{width:300px;transform:translateX(-90px)}}
-    /* Prevent narrow iPhone viewport overflow in overlays and cloud manager. */
-    .sheet{box-sizing:border-box;max-width:100%;overflow-x:hidden}
-    .sheet-actions{flex-wrap:wrap}
-    .sheet-actions button{min-width:0;white-space:normal;overflow-wrap:anywhere}
-    .cloud-manage-content{width:100%;max-width:100%;transform:none!important}
-    .cloud-manage[open]{grid-column:1 / -1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:9px}
-    .cloud-manage[open]>.cloud-manage-toggle{grid-column:2}
-    .cloud-manage[open]>.cloud-manage-content{grid-column:1 / -1;width:100%}
-    @media(max-width:480px){.cloud-manage-content{max-width:100%;width:100%}}
-    @media (min-width:560px){.cards-grid{grid-template-columns:repeat(10,1fr)}.card-btn{min-height:50px}.app{padding-left:20px;padding-right:20px}}
-  
-    /* Responsive enhancements for desktop/tablet — 2026-10-23.
+    /* Cloud actions: one row of equal buttons, separate full-width disclosure panel. */
+    .cloud-quick-row {
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:9px;
+      margin:10px 0 7px;
+      width:100%;
+      min-width:0;
+      align-items:start;
+    }
+    .cloud-sync-primary,.cloud-manage-toggle {
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      gap:5px;
+      box-sizing:border-box;
+      width:100%;
+      min-height:44px;
+      height:44px;
+      padding:9px 8px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#fff6f9;
+      color:var(--text);
+      font-size:13px;
+      font-weight:750;
+      white-space:nowrap;
+      text-align:center;
+    }
+    .cloud-sync-primary {grid-column:1;background:#fbe4ed;color:#9f426c;}
+    .cloud-manage {grid-column:2;min-width:0;margin:0;}
+    .cloud-manage-toggle {cursor:pointer;list-style:none;user-select:none;}
+    .cloud-manage-toggle::-webkit-details-marker {display:none;}
+    .cloud-manage-arrow {display:inline-block;transition:transform .2s;}
+    .cloud-manage[open] .cloud-manage-arrow {transform:rotate(180deg);}
+    .cloud-manage-content {
+      display:none;
+      grid-column:1 / -1;
+      width:100%;
+      min-width:0;
+      max-width:100%;
+      box-sizing:border-box;
+      margin:0;
+      padding:14px;
+      background:#fff8fa;
+      border:1px solid var(--line);
+      border-radius:13px;
+      transform:none;
+    }
+    .cloud-quick-row:has(> .cloud-manage[open]) > .cloud-manage-content {display:block;}
+    .cloud-manage-title {font-size:12px;font-weight:800;color:var(--muted);margin-bottom:10px;}
+    .cloud-manage-actions {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}
+    .cloud-manage-actions .text-btn {
+      min-width:0;
+      width:100%;
+      min-height:39px;
+      text-align:left;
+      padding:10px;
+      border-radius:9px;
+      background:#fff;
+      border:1px solid var(--line);
+      white-space:normal;
+      overflow-wrap:anywhere;
+    }
+    .cloud-main-status {font-size:11px;color:var(--muted);overflow-wrap:anywhere;line-height:1.6;margin:5px 0 9px;}
+    .cloud-draft-status {font-size:12px;color:var(--muted);line-height:1.6;margin-top:10px;overflow-wrap:anywhere;}
+    .cloud-version-result {font-size:12px;line-height:1.7;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:10px;white-space:pre-line;overflow-wrap:anywhere;}
+    .cloud-version-result[hidden] {display:none;}
+    .sheet {box-sizing:border-box;max-width:100%;overflow-x:hidden;}
+    .sheet-actions {flex-wrap:wrap;}
+    .sheet-actions button {min-width:0;white-space:normal;overflow-wrap:anywhere;}
+    @media (max-width:480px) {.cloud-manage-actions {grid-template-columns:1fr;}}
+    @media (min-width:560px) {.cards-grid{grid-template-columns:repeat(10,1fr)}.card-btn{min-height:50px}.app{padding-left:20px;padding-right:20px}}
+
+        /* Responsive enhancements for desktop/tablet — 2026-10-23.
        Existing phone card sizes and cloud operations are retained. */
     @media (min-width: 820px) {
       .app { max-width: 1020px; padding-left: 28px; padding-right: 28px; }
@@ -218,69 +261,7 @@
       }
     }
 
-    /* Cloud manager layout repair (mobile + desktop).
-       Keep actions on one row; expanded controls span the entire panel. */
-    .cloud-quick-row {
-      display:grid;
-      grid-template-columns:repeat(2,minmax(0,1fr));
-      gap:9px;
-      align-items:start;
-      width:100%;
-      min-width:0;
-    }
-    .cloud-quick-row > .cloud-sync-primary {
-      grid-column:1;
-      grid-row:1;
-      min-width:0;
-      position:relative;
-      z-index:2;
-    }
-    .cloud-quick-row > details.cloud-manage,
-    .cloud-quick-row > details.cloud-manage[open] {
-      grid-column:1 / -1;
-      grid-row:1;
-      display:grid;
-      grid-template-columns:repeat(2,minmax(0,1fr));
-      grid-template-rows:auto auto;
-      column-gap:9px;
-      row-gap:9px;
-      width:100%;
-      min-width:0;
-      position:relative;
-      transform:none;
-      margin:0;
-    }
-    .cloud-quick-row > details.cloud-manage > summary.cloud-manage-toggle {
-      grid-column:2;
-      grid-row:1;
-      min-width:0;
-      margin:0;
-    }
-    .cloud-quick-row > details.cloud-manage > .cloud-manage-content {
-      grid-column:1 / -1;
-      grid-row:2;
-      position:static;
-      width:100%;
-      max-width:100%;
-      min-width:0;
-      margin:0;
-      transform:none!important;
-      box-sizing:border-box;
-    }
-    .cloud-quick-row .cloud-manage-actions {
-      grid-template-columns:repeat(2,minmax(0,1fr));
-      gap:9px;
-    }
-    .cloud-quick-row .cloud-manage-actions > button {
-      min-width:0;
-      overflow-wrap:anywhere;
-      white-space:normal;
-    }
-    @media (max-width:480px) {
-      .cloud-quick-row .cloud-manage-actions {grid-template-columns:minmax(0,1fr);}
-    }
-
-</style>
+    </style>
 </head>
 <body>
   <main class="app">
@@ -381,7 +362,8 @@
         <button class="text-btn cloud-sync-primary" id="cloudSyncBtn">↻ 同步雲端</button>
         <details class="cloud-manage" id="cloudManage">
           <summary class="cloud-manage-toggle">⚙ 雲端管理 <span aria-hidden="true" class="cloud-manage-arrow">⌄</span></summary>
-          <div class="cloud-manage-content">
+        </details>
+        <div class="cloud-manage-content">
             <div class="cloud-manage-title">雲端設定與草稿</div>
             <div class="cloud-manage-actions">
               <button class="text-btn" id="saveDraftCloudBtn">☁ 備份本局草稿</button>
@@ -391,8 +373,7 @@
             </div>
             <div id="draftCloudStatus" role="status" aria-live="polite" class="cloud-draft-status">草稿已保留在此裝置，連線後可備份到雲端。</div>
             <div id="versionCheckResult" role="status" aria-live="polite" hidden class="cloud-version-result"></div>
-          </div>
-        </details>
+        </div>
       </div>
       <div id="cloudStatus" role="status" aria-live="polite" class="cloud-main-status">本機儲存模式</div>
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:8px 0 12px">
