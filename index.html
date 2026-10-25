@@ -199,7 +199,23 @@
       }
       .app > section.panel:nth-of-type(4) .card-btn { min-height:60px; }
       .footer-inner { max-width:1180px; }
-      .app .history-list { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px; }
+      .app .history-list {
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:12px;
+        align-items:start;
+      }
+      .app .history-list > .history-summary {
+        grid-column:1 / -1;
+        width:100%;
+        margin:0!important;
+        padding:4px 2px 2px;
+      }
+      .app .history-list > .history-item {
+        min-width:0;
+        margin:0;
+        height:100%;
+      }
     }
 </style>
 </head>
