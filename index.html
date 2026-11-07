@@ -261,6 +261,15 @@
       }
     }
 
+
+    /* 歷史紀錄日期／地點編輯：獨立表單，手機及桌面共用 */
+    #editMetaOverlay{z-index:80;align-items:center;padding:16px}
+    #editMetaOverlay .sheet{width:min(460px,100%);max-height:calc(100dvh - 32px);border-radius:22px;padding:22px 18px;overflow:auto}
+    #editMetaOverlay .edit-field{display:block;margin:16px 0 0;font-size:14px;font-weight:800;color:var(--text)}
+    #editMetaOverlay .edit-input{display:block;width:100%;margin-top:8px;padding:13px 12px;border-radius:12px;border:1px solid var(--line);background:#fff;color:var(--text);font:inherit;font-weight:500;min-height:46px}
+    #editMetaOverlay .edit-error{min-height:18px;color:var(--danger);font-size:13px;margin-top:10px}
+    #editMetaOverlay .sheet-actions button:disabled{opacity:.55;cursor:wait}
+
     </style>
 </head>
 <body>
@@ -433,6 +442,25 @@
     </div>
   </div>
 
+
+  <div class="overlay" id="editMetaOverlay" role="dialog" aria-modal="true" aria-labelledby="editMetaTitle">
+    <div class="sheet">
+      <h2 id="editMetaTitle">編輯遊玩日期／地點</h2>
+      <p>只修改這局的日期和地點，不會更動抽卡紀錄。</p>
+      <label class="edit-field" for="editMetaDate">遊玩日期
+        <input class="edit-input" id="editMetaDate" type="date" required />
+      </label>
+      <label class="edit-field" for="editMetaLocation">遊玩地點
+        <input class="edit-input" id="editMetaLocation" type="text" maxlength="150" placeholder="請輸入正確的地點" required />
+      </label>
+      <div id="editMetaError" class="edit-error" role="alert" aria-live="polite"></div>
+      <div class="sheet-actions">
+        <button class="secondary" id="cancelEditMetaBtn" type="button">取消</button>
+        <button class="primary" id="saveEditMetaBtn" type="button">儲存修改</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
 <script>
@@ -445,7 +473,7 @@
   const rarityBadge = r => r === 'four' ? '4★' : r === 'three' ? '3★' : '2★';
   const rarityEmoji = r => r === 'four' ? '⭐' : '';
   const laneLabel = l => l === 'left' ? '左' : '右';
-  const FRONTEND_VERSION = '2.1.3';
+  const FRONTEND_VERSION = '2.1.4';
   const EXPECTED_BACKEND_SCHEMA = 8;
   const STORE_HISTORY = 'cardDropTracker.history.v1';
   const STORE_DRAFT = 'cardDropTracker.draft.v1';
@@ -1066,18 +1094,52 @@
   $('#copyBtn').addEventListener('click',async()=>{ try{ await navigator.clipboard.writeText(exportText()); toast('已複製'); }catch{ toast('瀏覽器不允許自動複製'); } });
   $('#csvBtn').addEventListener('click',exportCSV);
   $('#closeHistoryBtn').addEventListener('click',()=>$('#historyOverlay').classList.remove('show'));
-  $('#editHistoryBtn').addEventListener('click',async()=>{
+  // 將歷史的日期（包含早期誤存的 Date 字串）轉成 date input 能讀的格式。
+  function editableHistoryDate(value){
+    if(typeof value==='string'&&playDateValid(value.slice(0,10)))return value.slice(0,10);
+    if(value){
+      const d=new Date(value);
+      if(!Number.isNaN(d.getTime())){
+        const day=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
+        if(playDateValid(day))return day;
+      }
+    }
+    return localToday();
+  }
+  let editingMetaId=null;
+  function closeMetaEditor(){
+    if(cloudBusy)return;
+    $('#editMetaOverlay').classList.remove('show');
+    editingMetaId=null;
+    $('#editMetaError').textContent='';
+  }
+  $('#cancelEditMetaBtn').addEventListener('click',closeMetaEditor);
+  $('#editMetaOverlay').addEventListener('click',e=>{if(e.target===$('#editMetaOverlay'))closeMetaEditor();});
+  $('#editHistoryBtn').addEventListener('click',()=>{
     if(cloudBusy||!selectedHistoryId){toast('雲端正在處理，請稍候');return;}
-    const id=selectedHistoryId,existing=history.find(x=>x.id===id);
+    const existing=history.find(x=>x.id===selectedHistoryId);
     if(!existing)return;
-    const date=prompt('修改實際遊玩日期（YYYY-MM-DD）',existing.playDate||localToday());
-    if(date===null)return;
-    if(!playDateValid(date.trim())){toast('日期格式錯誤');return;}
-    const venue=prompt('修改遊玩地點',existing.playLocation||'');
-    if(venue===null)return;
-    if(!venue.trim()||venue.trim().length>150){toast('地點必填，最多 150 字');return;}
-    if(!confirm('確定更新這局的遊玩日期及地點？卡號與掉卡順序不會更動。'))return;
-    cloudBusy=true;$('#editHistoryBtn').disabled=true;$('#cloudSyncBtn').disabled=true;
+    editingMetaId=existing.id;
+    $('#editMetaDate').value=editableHistoryDate(existing.playDate);
+    $('#editMetaLocation').value=existing.playLocation||'';
+    $('#editMetaError').textContent='';
+    $('#editMetaOverlay').classList.add('show');
+    $('#editMetaLocation').focus();
+  });
+  $('#saveEditMetaBtn').addEventListener('click',async()=>{
+    if(cloudBusy||!editingMetaId)return;
+    const id=editingMetaId,existing=history.find(x=>x.id===id);
+    if(!existing)return;
+    const date=$('#editMetaDate').value.trim();
+    const venue=$('#editMetaLocation').value.trim();
+    const error=$('#editMetaError');
+    if(!playDateValid(date)){error.textContent='請選擇正確的日期';return;}
+    if(!venue||venue.length>150){error.textContent='請填寫地點（最多 150 字）';return;}
+    if(date===editableHistoryDate(existing.playDate)&&venue===(existing.playLocation||'').trim()){
+      error.textContent='日期與地點沒有變更';return;
+    }
+    error.textContent='';
+        cloudBusy=true;$('#editHistoryBtn').disabled=true;$('#cloudSyncBtn').disabled=true;$('#saveEditMetaBtn').disabled=true;$('#cancelEditMetaBtn').disabled=true;
     try{
       cloudStatus('讀取雲端版本，確認可以編輯…');
       const before=await readCloud();
@@ -1105,11 +1167,12 @@
       openHistory(id);
       cloudStatus('✓ 歷史紀錄修改完成，雲端已驗證');
       toast('日期與地點已同步修改');
+      $('#editMetaOverlay').classList.remove('show');editingMetaId=null;
     }catch(err){
       cloudStatus('⚠ '+err.message+'；本機紀錄未覆蓋');
       toast('歷史編輯未完成');
     }finally{
-      cloudBusy=false;$('#editHistoryBtn').disabled=false;$('#cloudSyncBtn').disabled=false;
+      cloudBusy=false;$('#editHistoryBtn').disabled=false;$('#cloudSyncBtn').disabled=false;$('#saveEditMetaBtn').disabled=false;$('#cancelEditMetaBtn').disabled=false;
     }
   });
   $('#editHistoryCardsBtn').addEventListener('click',async()=>{
